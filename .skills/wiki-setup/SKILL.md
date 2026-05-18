@@ -40,16 +40,23 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
    - Set to `0` to disable the warning entirely
    - `wiki-status` shows a token footprint table and emits this warning automatically
 
+6. **Enable staged writes?** → `WIKI_STAGED_WRITES`
+   - Default: unset / `false` (pages written directly to their final location)
+   - Set to `true` for team wikis, high-stakes domains, or any vault where the human wants final say on every LLM-written page
+   - When enabled: all new/updated pages land in `_staging/` first; run `/wiki-stage-commit` to review and promote them
+   - `wiki-status` shows a "Staged writes pending" count when files are waiting
+
 ## Step 2: Create Vault Directory Structure
 
 ```bash
-mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,_archives,_raw,.obsidian}
+mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,_archives,_raw,_staging,.obsidian}
 ```
 
 - `.obsidian/` — Obsidian's own config. Creates vault recognition.
 - `projects/` — Per-project knowledge (populated during ingest).
 - `_archives/` — Stores wiki snapshots for rebuild/restore operations.
 - `_raw/` — Staging area for unprocessed drafts. Drop rough notes here; `wiki-ingest` will promote them to proper wiki pages and delete the originals.
+- `_staging/` — Review queue for LLM-written pages when `WIKI_STAGED_WRITES=true`. Pages here are not visible in Obsidian's graph until promoted via `/wiki-stage-commit`.
 
 ## Step 3: Create Special Files
 
@@ -159,6 +166,7 @@ Run a quick sanity check:
 - [ ] `hot.md` exists at vault root
 - [ ] `.env` has `OBSIDIAN_VAULT_PATH` set
 - [ ] `.obsidian/` directory exists
+- [ ] `_staging/` directory exists (required even when `WIKI_STAGED_WRITES` is not set — created on setup for future use)
 - [ ] Source directories (if configured) exist and are readable
 
 Report the results and tell the user they can now:

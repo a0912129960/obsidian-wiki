@@ -15,10 +15,11 @@ You are ingesting source documents into an Obsidian wiki. Your job is not to sum
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`, `OBSIDIAN_SOURCES_DIR`, and `OBSIDIAN_LINK_FORMAT` (default: `wikilink`). Only read the specific variables you need — do not log, echo, or reference any other values from these files.
-2. Read `.manifest.json` at the vault root to check what's already been ingested
-3. Read `index.md` to understand current wiki content
-4. Read `log.md` to understand recent activity
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`, `OBSIDIAN_SOURCES_DIR`, `OBSIDIAN_LINK_FORMAT` (default: `wikilink`), and `WIKI_STAGED_WRITES`. Only read the specific variables you need — do not log, echo, or reference any other values from these files.
+2. **Check `WIKI_STAGED_WRITES`** — if set to `true`, all new and updated category pages go to `_staging/<category>/` instead of their final location. Tell the user at the start of the ingest: "Staged writes mode is enabled — pages will land in `_staging/` for your review. Run `/wiki-stage-commit` when ready to promote."
+3. Read `.manifest.json` at the vault root to check what's already been ingested
+4. Read `index.md` to understand current wiki content
+5. Read `log.md` to understand recent activity
 
 When writing internal links in Step 5, apply the link format described in `llm-wiki/SKILL.md` (Link Format section) according to the `OBSIDIAN_LINK_FORMAT` value you read.
 
@@ -195,6 +196,34 @@ Pages without a `tier:` field are treated as `supporting`. When in doubt, err to
 ### Step 5: Write/Update Pages
 
 For each page in your plan:
+
+**If `WIKI_STAGED_WRITES=true`, apply the staging rules below before writing anything:**
+
+- **New pages** go to `_staging/<category>/page.md` instead of `<category>/page.md`. The page content is identical to what it would be in the live wiki — only the location differs.
+- **Updates to existing pages** go to `_staging/<category>/page.patch.md`. The patch file format:
+  ```markdown
+  ---
+  title: <same as target page>
+  patch_target: <category>/page.md
+  ingested_at: <ISO timestamp>
+  source: <source path>
+  ---
+  # Proposed Update: <page title>
+
+  ## Additions
+  <new paragraphs/bullets to merge into the page>
+
+  ## Deletions
+  <lines to remove, verbatim from current page>
+
+  ## Updated Fields
+  updated: <new ISO timestamp>
+  sources: [<new source added>]
+  ```
+- `index.md` and `log.md` are always updated immediately (low-risk tracking files). `hot.md` notes that staged writes are pending.
+- When writing staged pages, use the path `_staging/<category>/` — create the directory if it doesn't exist.
+
+**If `WIKI_STAGED_WRITES` is not set or is `false` (default):**
 
 **If creating a new page:**
 - Use the page template from the llm-wiki skill (frontmatter + sections)
