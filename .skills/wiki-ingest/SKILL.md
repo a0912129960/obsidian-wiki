@@ -45,16 +45,28 @@ This applies to all ingest modes and all source formats.
 This skill supports three modes. Ask the user or infer from context:
 
 ### Append Mode (default)
-Only ingest sources that are **new or modified** since last ingest. Check the manifest using both timestamp **and content hash**:
+Only ingest sources that are **new or modified** since last ingest. Use the built-in cache command for a reliable, platform-independent check:
 
-- If a source path is not in `.manifest.json` → it's new, ingest it
-- If a source path is in `.manifest.json`:
-  - Compute the file's SHA-256 hash: `sha256sum -- "<file>"` (or `shasum -a 256 -- "<file>"` on macOS). Always double-quote the path and use `--` to prevent filenames with special characters or leading dashes from being interpreted by the shell.
-  - If the hash matches `content_hash` in the manifest → **skip it**, even if the modification time differs (file was touched but content is identical — git checkout, copy, NFS timestamp drift)
-  - If the hash differs → it's genuinely modified, re-ingest it
-- If a source path is in `.manifest.json` and has no `content_hash` (older entry) → fall back to mtime comparison as before
+```bash
+obsidian-wiki cache-check "$OBSIDIAN_VAULT_PATH" <source1> [source2 ...]
+```
 
-This is the right choice most of the time. It's fast and avoids redundant work even when timestamps are unreliable.
+Output: `{"new": [...], "modified": [...], "unchanged": [...], "missing": [...]}`.
+
+- `new` → ingest these
+- `modified` → re-ingest these (content changed since last run)
+- `unchanged` → skip entirely — hash matches, content is identical
+- `missing` → in manifest but no longer on disk; skip and optionally clean up
+
+After ingesting each source, record its hash:
+
+```bash
+obsidian-wiki cache-update "$OBSIDIAN_VAULT_PATH" <source> --pages <page1> [page2 ...]
+```
+
+**Fallback** (if `obsidian-wiki` is not installed): compute hashes manually with `sha256sum -- "<file>"` (Linux) or `shasum -a 256 -- "<file>"` (macOS) and compare against `content_hash` in `.manifest.json`. If the entry has no `content_hash`, fall back to mtime comparison.
+
+This avoids redundant work even when timestamps are unreliable (git checkout, NFS drift, copy operations).
 
 ### Full Mode
 Ingest everything regardless of manifest state. Use when:

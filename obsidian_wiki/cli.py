@@ -349,6 +349,38 @@ def cmd_setup(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cache_check(args: argparse.Namespace) -> int:
+    from obsidian_wiki.cache import check_sources
+    vault = Path(args.vault).expanduser().resolve()
+    sources = [Path(p).expanduser().resolve() for p in args.sources]
+    result = check_sources(vault, sources)
+    if args.pretty:
+        print(json.dumps(result, indent=2))
+    else:
+        print(json.dumps(result))
+    return 0
+
+
+def cmd_cache_update(args: argparse.Namespace) -> int:
+    from obsidian_wiki.cache import update_source
+    vault = Path(args.vault).expanduser().resolve()
+    source = Path(args.source).expanduser().resolve()
+    pages = args.pages or []
+    h = update_source(vault, source, pages_produced=pages)
+    print(json.dumps({"path": str(source), "content_hash": h}))
+    return 0
+
+
+def cmd_cache_hash(args: argparse.Namespace) -> int:
+    from obsidian_wiki.cache import hash_file
+    path = Path(args.path).expanduser().resolve()
+    if not path.exists():
+        print(f"error: {path} does not exist", file=sys.stderr)
+        return 1
+    print(json.dumps({"path": str(path), "sha256": hash_file(path)}))
+    return 0
+
+
 def cmd_ast_extract(args: argparse.Namespace) -> int:
     from pathlib import Path
     from obsidian_wiki.ast_extractor import extract
@@ -422,6 +454,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     ip = sub.add_parser("info", help="show install paths, version, and config")
     ip.set_defaults(func=cmd_info)
+
+    cc = sub.add_parser(
+        "cache-check",
+        help="check which sources are new/modified/unchanged vs. .manifest.json",
+    )
+    cc.add_argument("vault", help="path to the Obsidian vault")
+    cc.add_argument("sources", nargs="+", help="source file or directory paths to check")
+    cc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    cc.set_defaults(func=cmd_cache_check)
+
+    cu = sub.add_parser(
+        "cache-update",
+        help="record a source's current SHA-256 hash in .manifest.json after ingestion",
+    )
+    cu.add_argument("vault", help="path to the Obsidian vault")
+    cu.add_argument("source", help="source file or directory that was just ingested")
+    cu.add_argument("--pages", nargs="*", metavar="PAGE", help="vault-relative paths of pages produced")
+    cu.set_defaults(func=cmd_cache_update)
+
+    ch = sub.add_parser(
+        "cache-hash",
+        help="compute the SHA-256 hash of a file or directory (no manifest I/O)",
+    )
+    ch.add_argument("path", help="file or directory to hash")
+    ch.set_defaults(func=cmd_cache_hash)
 
     ap = sub.add_parser(
         "ast-extract",
