@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 
 
@@ -38,11 +39,8 @@ class WikiNarrateDocsTest(unittest.TestCase):
     def test_voice_reference_has_exactly_the_three_first_release_voices(self) -> None:
         voices = self.read(".skills/wiki-narrate/references/voices.md")
 
-        for voice in ["briefing", "plain-language", "lecturer"]:
-            self.assertIn(f"## `{voice}`", voices)
-
-        self.assertNotIn("## `essayist`", voices)
-        self.assertNotIn("## `journalist`", voices)
+        headings = set(re.findall(r"^## `([^`]+)`$", voices, flags=re.MULTILINE))
+        self.assertEqual(headings, {"briefing", "plain-language", "lecturer"})
 
     def test_routing_and_readme_expose_wiki_narrate(self) -> None:
         agents = self.read("AGENTS.md")
