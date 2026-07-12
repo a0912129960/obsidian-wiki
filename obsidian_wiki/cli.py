@@ -752,7 +752,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
 
-    report = lint_vault(vault)
+    report = lint_vault(vault, require_trust_ledger=True)
     if args.json:
         if args.pretty:
             print(json.dumps(report, indent=2))
@@ -760,6 +760,74 @@ def cmd_lint(args: argparse.Namespace) -> int:
             print(json.dumps(report))
     else:
         _print_lint(report)
+    if report["status"] == "fail" or (args.strict and report["status"] == "warn"):
+        return 1
+    return 0
+
+
+def _resolve_command_vault(vault_arg: str | None) -> Path | None:
+    resolved = vault_arg or _read_config_value("OBSIDIAN_VAULT_PATH")
+    if not resolved:
+        print("error: vault not configured; pass a path or run obsidian-wiki setup", file=sys.stderr)
+        return None
+    vault = Path(resolved).expanduser().resolve()
+    if not vault.is_dir():
+        print(f"error: vault not found: {vault}", file=sys.stderr)
+        return None
+    return vault
+
+
+def cmd_trust_record(args: argparse.Namespace) -> int:
+    from obsidian_wiki.trust import (
+        TRUST_LEDGER_RELATIVE_PATH,
+        build_trust_ledger,
+        update_trust_ledger,
+        write_trust_ledger,
+    )
+
+    vault = _resolve_command_vault(args.vault)
+    if vault is None:
+        return 1
+    path = vault / TRUST_LEDGER_RELATIVE_PATH
+    if args.all:
+        ledger = build_trust_ledger(vault, reviewed_at=args.reviewed_at)
+        recorded_pages = len(ledger["pages"])
+    else:
+        ledger = update_trust_ledger(
+            vault,
+            path,
+            reviewed_at=args.reviewed_at,
+            page_paths=args.page,
+        )
+        recorded_pages = len(set(args.page))
+    write_trust_ledger(path, ledger)
+    result = {
+        "status": "recorded",
+        "ledger_path": str(path),
+        "recorded_pages": recorded_pages,
+        "reviewed_at": args.reviewed_at,
+        "method": ledger["method"],
+    }
+    if args.json:
+        print(json.dumps(result, indent=2 if args.pretty else None))
+    else:
+        print(f"recorded {result['recorded_pages']} reviewed page(s) in {path}")
+    return 0
+
+
+def cmd_trust_check(args: argparse.Namespace) -> int:
+    from obsidian_wiki.trust import check_trust_ledger
+
+    vault = _resolve_command_vault(args.vault)
+    if vault is None:
+        return 1
+    report = check_trust_ledger(vault)
+    if args.json:
+        print(json.dumps(report, indent=2 if args.pretty else None))
+    else:
+        print(f"obsidian-wiki trust-check: {report['status']}")
+        for name, count in report["counts"].items():
+            print(f"{name}: {count}")
     if report["status"] == "fail" or (args.strict and report["status"] == "warn"):
         return 1
     return 0
@@ -951,6 +1019,40 @@ def build_parser() -> argparse.ArgumentParser:
     lt.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     lt.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
     lt.set_defaults(func=cmd_lint)
+
+    tr = sub.add_parser(
+        "trust-record",
+        help="record explicitly approved manual confidence reviews in the vault trust ledger",
+    )
+    tr.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    selection = tr.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--all", action="store_true", help="record every current trust-schema page")
+    selection.add_argument(
+        "--page",
+        action="append",
+        metavar="VAULT_RELATIVE_PATH",
+        help="record only this explicitly reviewed page (repeatable)",
+    )
+    tr.add_argument("--reviewed-at", required=True, help="ISO timestamp for the approved review")
+    tr.add_argument(
+        "--approved",
+        action="store_true",
+        required=True,
+        help="confirm a human approved every confidence value being recorded",
+    )
+    tr.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    tr.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    tr.set_defaults(func=cmd_trust_record)
+
+    tc = sub.add_parser(
+        "trust-check",
+        help="validate confidence values and material fingerprints against the manual trust ledger",
+    )
+    tc.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    tc.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    tc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    tc.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
+    tc.set_defaults(func=cmd_trust_check)
 
     qq = sub.add_parser(
         "query",

@@ -174,7 +174,9 @@ Enforces the confidence + lifecycle frontmatter schema (see `llm-wiki/SKILL.md`,
 
 Two modes:
 - **`--check`** (default, read-only) — reports errors and warnings
-- **`--fix`** — may rewrite `base_confidence` only when drift is detected (Rule 12e); never rewrites `lifecycle`
+- **`--consolidate`** — may apply separately approved structural maintenance, but **never rewrites `base_confidence`**
+
+Confidence is a semantic judgment. A deterministic tool cannot infer independent evidence lineages or whole-page claim coverage from source strings alone. Confidence automation therefore validates an explicitly approved manual trust ledger; it never substitutes URL counting for review.
 
 #### Rule 12a — `lifecycle` enum validation
 
@@ -208,11 +210,50 @@ Staleness is never stored — it is computed at read time: `is_stale = (today �
 
 **How to fix:** n/a — flag for human resolution
 
-#### Rule 12e — Confidence drift
+#### Rule 12e — Confidence review integrity
 
-**How to check:** For pages that have both `base_confidence:` and `sources:` in frontmatter, recompute `base_confidence` using the formula in `llm-wiki/SKILL.md`. If the stored value differs from the recomputed value by more than 0.05, flag it as drift.
+**How to check:** Run the deterministic ledger validator first:
 
-**How to fix (`--fix` only):** Rewrite the `base_confidence` field to the recomputed value. This is the **only rule** that mutates frontmatter automatically.
+```bash
+obsidian-wiki trust-check "$OBSIDIAN_VAULT_PATH" --json --pretty
+```
+
+The approved ledger lives at `_meta/trust-ledger.json`. Each entry records the human-reviewed score plus a SHA-256 fingerprint of material page content and evidence metadata. The fingerprint excludes volatile bookkeeping (`updated`, `base_confidence`, and lifecycle transition fields), so timestamp-only edits do not reopen review.
+
+Interpret results as follows:
+
+- `reviewed` — current material fingerprint and stored score both match the approved review; do **not** recompute from source strings.
+- `stale` — body, summary, sources, provenance, tags, or relationships changed; perform a new manual lineage + claim-coverage review.
+- `unreviewed` — page has no approved ledger entry; manual review is required.
+- `score_mismatches` — material content still matches, but stored `base_confidence` differs from the approved value; fail the lint.
+- `errors` — malformed/missing ledger data; fail the lint.
+
+For a separately approved full-vault review, record the accepted state explicitly:
+
+```bash
+obsidian-wiki trust-record "$OBSIDIAN_VAULT_PATH" \
+  --all --reviewed-at "<ISO-8601 timestamp>" --approved --json --pretty
+```
+
+After a separately approved review of only specific stale/unreviewed pages, update only those entries:
+
+```bash
+obsidian-wiki trust-record "$OBSIDIAN_VAULT_PATH" \
+  --page "concepts/example.md" --page "skills/example.md" \
+  --reviewed-at "<ISO-8601 timestamp>" --approved --json --pretty
+```
+
+`--approved` means a human approved every score being recorded. `--all` is valid only after a full-vault review; use repeatable `--page` for partial reviews so unrelated stale pages remain open. Never run `trust-record` merely to silence warnings.
+
+**Manual recomputation protocol for stale/unreviewed pages:**
+
+1. Decompose the page into material claims and map each claim to evidence.
+2. Collapse dependent evidence into independent lineages: files/commits from one repository, retries in one task chain, snapshots plus their captured source, duplicate memories, and parent/child tasks each count once.
+3. Assign reviewed quality per independent lineage using `llm-wiki` buckets.
+4. Compute the raw base score, then assess whole-page claim coverage. The formula is a starting point, not an automatic target.
+5. Classify the result as `raise`, `keep`, `lower`, or `repair first`; require approval before changing `base_confidence` or refreshing the ledger.
+
+**How to fix:** There is no automatic confidence fix. Apply only an explicitly approved exact patch, verify its scope, then refresh only the reviewed ledger state. `--consolidate` must never rewrite `base_confidence`.
 
 #### Migration timeline
 
@@ -234,7 +275,8 @@ Add to the Wiki Health Report:
 - `synthesis/old-analysis.md` — STALE (last updated 2025-10-01, 182 days ago) lifecycle=verified ⚠️ HIGH PRIORITY
 - `concepts/outdated.md` — STALE (last updated 2025-11-15, 137 days ago) lifecycle=draft
 - `entities/tool-v1.md` — `superseded_by: [[entities/tool-v2]]` but lifecycle=draft (expected archived)
-- `concepts/drift-example.md` — base_confidence drift: stored=0.80, recomputed=0.59 (delta=0.21)
+- `concepts/drift-example.md` — confidence review stale: material fingerprint changed; manual lineage + coverage review required
+- `entities/mismatch.md` — confidence mismatch: stored=0.80, approved=0.59
 ```
 
 Append to the `LINT` log entry:

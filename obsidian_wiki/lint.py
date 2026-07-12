@@ -7,14 +7,30 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SKIP_DIRS = frozenset("_raw _archived _staging _archives .obsidian".split())
-REQUIRED_FRONTMATTER = ("title", "category", "tags", "sources", "created", "updated")
+from obsidian_wiki.trust import TRUST_LEDGER_RELATIVE_PATH, check_trust_ledger
+
+SKIP_DIRS = frozenset("_raw _archived _staging _archives _bootstrap .obsidian".split())
+REQUIRED_FRONTMATTER = (
+    "title",
+    "category",
+    "tags",
+    "sources",
+    "created",
+    "updated",
+    "base_confidence",
+    "lifecycle",
+)
 RESERVED_PAGE_STEMS = frozenset({"index", "log", "hot", "_insights"})
+ALLOWED_RELATIONSHIP_TYPES = frozenset(
+    {"extends", "implements", "contradicts", "derived_from", "uses", "replaces", "related_to"}
+)
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 _FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
 _MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
+_RELATIONSHIP_TYPE_RE = re.compile(r"^\s*-\s*type:\s*['\"]?([^'\"#]+?)['\"]?\s*$")
+_RELATIONSHIP_TARGET_RE = re.compile(r"^\s*target:\s*['\"]?([^'\"#]+?)['\"]?\s*$")
 
 
 def _slug(text: str) -> str:
@@ -57,6 +73,40 @@ def _parse_frontmatter_values(frontmatter: str) -> dict[str, str]:
     return values
 
 
+def _parse_relationships(frontmatter: str) -> list[dict[str, str]]:
+    relationships: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    in_relationships = False
+    for line in frontmatter.splitlines():
+        if line == "relationships:":
+            in_relationships = True
+            continue
+        if in_relationships and line and not line.startswith((" ", "\t")):
+            break
+        if not in_relationships:
+            continue
+        type_match = _RELATIONSHIP_TYPE_RE.match(line)
+        if type_match:
+            if current:
+                relationships.append(current)
+            current = {"type": type_match.group(1).strip()}
+            continue
+        target_match = _RELATIONSHIP_TARGET_RE.match(line)
+        if target_match and current is not None:
+            current["target"] = target_match.group(1).strip()
+    if current:
+        relationships.append(current)
+    return relationships
+
+
+def _normalise_node_id(raw: str) -> str:
+    target = raw.strip().removeprefix("[[").removesuffix("]]")
+    target = target.split("|", 1)[0].split("#", 1)[0].strip()
+    if target.lower().endswith(".md"):
+        target = target[:-3]
+    return "/".join(_slug(part) for part in target.strip("/").split("/") if part)
+
+
 def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
     front_match = _FRONTMATTER_RE.match(text)
@@ -76,17 +126,20 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
 
     return {
         "path": str(path.relative_to(vault)),
+        "node_id": _normalise_node_id(str(path.relative_to(vault).with_suffix(""))),
         "slug": _slug(path.stem),
         "title": values.get("title", "").strip() or path.stem,
         "summary": values.get("summary", "").strip(),
         "fields": fields,
         "links": links,
+        "relationships": _parse_relationships(frontmatter),
     }
 
 
-def lint_vault(vault: Path) -> dict[str, Any]:
+def lint_vault(vault: Path, *, require_trust_ledger: bool = False) -> dict[str, Any]:
     pages = [_parse_page(path, vault) for path in _iter_pages(vault)]
     by_slug = {page["slug"]: page for page in pages}
+    by_node_id = {page["node_id"]: page for page in pages}
     incoming: dict[str, int] = defaultdict(int)
 
     broken_links: list[dict[str, str]] = []
@@ -101,6 +154,8 @@ def lint_vault(vault: Path) -> dict[str, Any]:
 
     missing_frontmatter = []
     for page in pages:
+        if page["slug"] in RESERVED_PAGE_STEMS:
+            continue
         missing = [field for field in REQUIRED_FRONTMATTER if field not in page["fields"]]
         if missing:
             missing_frontmatter.append({"page": page["path"], "missing": missing})
@@ -118,7 +173,8 @@ def lint_vault(vault: Path) -> dict[str, Any]:
     missing_summaries = [
         page["path"]
         for page in pages
-        if "summary" not in page["fields"] or not page["summary"]
+        if page["slug"] not in RESERVED_PAGE_STEMS
+        and ("summary" not in page["fields"] or not page["summary"])
     ]
 
     orphan_pages = []
@@ -129,18 +185,83 @@ def lint_vault(vault: Path) -> dict[str, Any]:
         if outgoing == 0 and incoming.get(page["slug"], 0) == 0:
             orphan_pages.append(page["path"])
 
+    typed_relationship_issues: list[dict[str, Any]] = []
+    for page in pages:
+        for index, relationship in enumerate(page["relationships"]):
+            relation_type = relationship.get("type", "")
+            target_raw = relationship.get("target", "")
+            if relation_type not in ALLOWED_RELATIONSHIP_TYPES:
+                typed_relationship_issues.append(
+                    {
+                        "page": page["path"],
+                        "index": index,
+                        "issue": "invalid_type",
+                        "type": relation_type,
+                    }
+                )
+                continue
+            target = _normalise_node_id(target_raw)
+            resolved = by_node_id.get(target)
+            if resolved is None and "/" not in target:
+                resolved = by_slug.get(target)
+            if resolved is None:
+                typed_relationship_issues.append(
+                    {
+                        "page": page["path"],
+                        "index": index,
+                        "issue": "missing_target",
+                        "target": target,
+                    }
+                )
+            elif resolved["node_id"] == page["node_id"]:
+                typed_relationship_issues.append(
+                    {
+                        "page": page["path"],
+                        "index": index,
+                        "issue": "self_reference",
+                        "target": target,
+                    }
+                )
+
+    ledger_path = vault / TRUST_LEDGER_RELATIVE_PATH
+    trust_report = (
+        check_trust_ledger(vault, ledger_path)
+        if ledger_path.is_file() or require_trust_ledger
+        else None
+    )
+
     findings = {
         "broken_links": broken_links,
         "missing_frontmatter": missing_frontmatter,
         "duplicate_titles": duplicate_titles,
         "missing_summaries": sorted(missing_summaries),
         "orphan_pages": sorted(orphan_pages),
+        "typed_relationship_issues": typed_relationship_issues,
+        "confidence_review_stale": trust_report["stale"] if trust_report else [],
+        "confidence_unreviewed": trust_report["unreviewed"] if trust_report else [],
+        "confidence_mismatches": trust_report["score_mismatches"] if trust_report else [],
+        "confidence_ledger_errors": trust_report["errors"] if trust_report else [],
     }
     counts = {name: len(items) for name, items in findings.items()}
 
-    if counts["broken_links"] or counts["missing_frontmatter"]:
+    if (
+        counts["broken_links"]
+        or counts["missing_frontmatter"]
+        or counts["confidence_mismatches"]
+        or counts["confidence_ledger_errors"]
+    ):
         status = "fail"
-    elif any(counts[name] for name in ("duplicate_titles", "missing_summaries", "orphan_pages")):
+    elif any(
+        counts[name]
+        for name in (
+            "duplicate_titles",
+            "missing_summaries",
+            "orphan_pages",
+            "typed_relationship_issues",
+            "confidence_review_stale",
+            "confidence_unreviewed",
+        )
+    ):
         status = "warn"
     else:
         status = "pass"
@@ -151,6 +272,7 @@ def lint_vault(vault: Path) -> dict[str, Any]:
             "pages": len(pages),
             "link_count": sum(len(page["links"]) for page in pages),
             "findings": counts,
+            "trust": trust_report["counts"] if trust_report else {"ledger": "not_configured"},
         },
         "findings": findings,
     }

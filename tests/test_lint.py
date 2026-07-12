@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from obsidian_wiki.lint import lint_vault
+from obsidian_wiki.trust import build_trust_ledger, write_trust_ledger
 
 
 def _page(
@@ -37,6 +38,8 @@ def _page(
                 f"sources: {sources}",
                 f"created: {created}",
                 f"updated: {updated}",
+                "base_confidence: 0.80",
+                "lifecycle: reviewed",
             ]
         )
         if summary is not None:
@@ -108,6 +111,8 @@ def test_lint_cli_uses_configured_vault_and_strict_mode(tmp_path: Path) -> None:
     config_dir = home / ".obsidian-wiki"
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger)
 
     proc = _run(home, "lint", "--json", "--strict")
 

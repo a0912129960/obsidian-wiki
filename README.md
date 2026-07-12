@@ -48,6 +48,8 @@ obsidian-wiki info              # show install paths, version, and config
 obsidian-wiki doctor            # health-check config, vault shape, and installed skills
 obsidian-wiki query "rate limiting"  # query the configured vault from the terminal
 obsidian-wiki lint              # lint the configured vault for broken links / metadata gaps
+obsidian-wiki trust-check       # validate confidence against approved manual review fingerprints
+obsidian-wiki trust-record --all --reviewed-at <ISO> --approved  # record a human-approved full review
 obsidian-wiki setup --project . # also drop project-local skills + AGENTS.md into the current repo
 obsidian-wiki setup --copy      # copy skill files instead of symlinking
 ```
