@@ -32,6 +32,7 @@ _MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
 _RELATIONSHIP_LIST_FIELD_RE = re.compile(
     r"^\s*-\s*(type|target):\s*(.*?)\s*$"
 )
+_RELATIONSHIP_ITEM_START_RE = re.compile(r"^\s*-\s*(?:#.*)?$")
 _RELATIONSHIP_FIELD_RE = re.compile(r"^\s+(type|target):\s*(.*?)\s*$")
 
 
@@ -106,6 +107,11 @@ def _parse_relationships(frontmatter: str) -> list[dict[str, str]]:
                 relationships.append(current)
             current = {item_match.group(1): _relationship_scalar(item_match.group(2))}
             continue
+        if _RELATIONSHIP_ITEM_START_RE.match(line):
+            if current is not None:
+                relationships.append(current)
+            current = {}
+            continue
         field_match = _RELATIONSHIP_FIELD_RE.match(line)
         if field_match and current is not None:
             key = field_match.group(1)
@@ -113,6 +119,12 @@ def _parse_relationships(frontmatter: str) -> list[dict[str, str]]:
                 current["parse_error"] = f"duplicate_relationship_{key}"
             else:
                 current[key] = _relationship_scalar(field_match.group(2))
+            continue
+        if line.strip() and not line.lstrip().startswith("#"):
+            if current is None:
+                current = {"parse_error": "malformed_relationship_entry"}
+            else:
+                current.setdefault("parse_error", "malformed_relationship_entry")
     if current is not None:
         relationships.append(current)
     return relationships
@@ -159,10 +171,11 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
 def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, Any]:
     pages = [_parse_page(path, vault) for path in _iter_pages(vault)]
     slug_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    node_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for page in pages:
         slug_index[page["slug"]].append(page)
+        node_index[page["node_id"]].append(page)
     by_slug = {slug: matches[0] for slug, matches in slug_index.items()}
-    by_node_id = {page["node_id"]: page for page in pages}
     incoming: dict[str, int] = defaultdict(int)
 
     broken_links: list[dict[str, str]] = []
@@ -233,21 +246,18 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
                 )
                 continue
             target = _normalise_node_id(target_raw)
-            if "/" in target:
-                resolved = by_node_id.get(target)
-            else:
-                matches = slug_index.get(target, [])
-                if len(matches) > 1:
-                    typed_relationship_issues.append(
-                        {
-                            "page": page["path"],
-                            "index": index,
-                            "issue": "ambiguous_target",
-                            "target": target,
-                        }
-                    )
-                    continue
-                resolved = matches[0] if matches else None
+            matches = node_index.get(target, []) if "/" in target else slug_index.get(target, [])
+            if len(matches) > 1:
+                typed_relationship_issues.append(
+                    {
+                        "page": page["path"],
+                        "index": index,
+                        "issue": "ambiguous_target",
+                        "target": target,
+                    }
+                )
+                continue
+            resolved = matches[0] if matches else None
             if resolved is None:
                 typed_relationship_issues.append(
                     {

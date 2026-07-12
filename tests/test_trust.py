@@ -171,6 +171,39 @@ def test_invalid_lifecycle_fails_closed(tmp_path: Path) -> None:
     ]
 
 
+def test_mismatched_scalar_quotes_fail_closed(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    ledger_path = _write_ledger(vault)
+    page.write_text(page.read_text().replace("lifecycle: reviewed", 'lifecycle: "reviewed\''))
+
+    report = check_trust_ledger(vault, ledger_path)
+
+    assert report["status"] == "fail"
+    assert report["errors"] == [
+        {"page": "concepts/alpha.md", "issue": 'invalid lifecycle: "reviewed\''}
+    ]
+
+
+def test_invalid_updated_timestamp_fails_before_fingerprint_match(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    ledger_path = _write_ledger(vault)
+    page.write_text(
+        page.read_text().replace(
+            "updated: 2026-07-12T17:38:39+07:00",
+            "updated: definitely-not-a-timestamp",
+        )
+    )
+
+    report = check_trust_ledger(vault, ledger_path)
+
+    assert report["status"] == "fail"
+    assert report["errors"] == [
+        {"page": "concepts/alpha.md", "issue": "updated is not an ISO-8601 date or timestamp"}
+    ]
+
+
 def test_inline_comments_on_scalar_trust_fields_remain_valid(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     page = _page(vault, "concepts/alpha.md")
@@ -529,6 +562,50 @@ def test_target_first_relationship_order_is_parsed_and_validated(tmp_path: Path)
     ]
 
 
+def test_dash_only_relationship_item_is_parsed_and_validated(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(
+        page.read_text().replace(
+            "lifecycle: reviewed",
+            'lifecycle: reviewed\nrelationships:\n  -\n    target: "[[skills/missing]]"\n    type: related_to',
+        )
+    )
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["typed_relationship_issues"] == [
+        {
+            "page": "concepts/alpha.md",
+            "index": 0,
+            "issue": "missing_target",
+            "target": "skills/missing",
+        }
+    ]
+
+
+def test_unknown_relationship_field_fails_closed(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    _page(vault, "skills/beta.md")
+    page.write_text(
+        page.read_text().replace(
+            "lifecycle: reviewed",
+            'lifecycle: reviewed\nrelationships:\n  - target: "[[skills/beta]]"\n    type: related_to\n    weight: 5',
+        )
+    )
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["typed_relationship_issues"] == [
+        {
+            "page": "concepts/alpha.md",
+            "index": 0,
+            "issue": "malformed_relationship_entry",
+        }
+    ]
+
+
 def test_basename_only_relationship_is_rejected_when_ambiguous(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(vault, "concepts/alpha.md", relationships=[("related_to", "beta")])
@@ -543,6 +620,24 @@ def test_basename_only_relationship_is_rejected_when_ambiguous(tmp_path: Path) -
             "index": 0,
             "issue": "ambiguous_target",
             "target": "beta",
+        }
+    ]
+
+
+def test_qualified_relationship_is_ambiguous_when_normalized_paths_collide(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", relationships=[("related_to", "skills/foo-bar")])
+    _page(vault, "skills/Foo Bar.md")
+    _page(vault, "skills/foo-bar.md")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["typed_relationship_issues"] == [
+        {
+            "page": "concepts/alpha.md",
+            "index": 0,
+            "issue": "ambiguous_target",
+            "target": "skills/foo-bar",
         }
     ]
 

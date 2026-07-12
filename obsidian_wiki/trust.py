@@ -28,7 +28,7 @@ TRUST_SKIP_DIRS = frozenset(
 )
 TRUST_RESERVED_STEMS = frozenset({"index", "log", "hot", "_insights"})
 ALLOWED_LIFECYCLES = frozenset({"draft", "reviewed", "verified", "disputed", "archived"})
-_REQUIRED_TRUST_KEYS = ("base_confidence", "lifecycle")
+_REQUIRED_TRUST_KEYS = ("base_confidence", "lifecycle", "updated")
 _VOLATILE_CONFIDENCE_KEYS = (
     "updated",
     "base_confidence",
@@ -55,6 +55,16 @@ def _validate_reviewed_at(value: Any) -> str:
         raise ValueError("reviewed_at must be an ISO-8601 timestamp with timezone") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("reviewed_at must be an ISO-8601 timestamp with timezone")
+    return candidate
+
+
+def _validate_updated(value: str) -> str:
+    candidate = value.strip()
+    try:
+        # Page metadata intentionally permits either an ISO date or an ISO date-time.
+        datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("updated is not an ISO-8601 date or timestamp") from exc
     return candidate
 
 
@@ -123,6 +133,9 @@ def _trust_metadata(path: Path) -> dict[str, Any]:
         scalar = _frontmatter_scalar(raw)
         if not scalar or scalar in {">", ">-", "|", "|-"} or children:
             raise ValueError(f"{key} must be a scalar")
+
+    updated = _frontmatter_scalar(records["updated"][0][0])
+    _validate_updated(updated)
 
     confidence_raw = _frontmatter_scalar(records["base_confidence"][0][0])
     try:
