@@ -420,7 +420,7 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | `wiki-status`           | Show what's ingested, what's pending, the delta   | `/wiki-status`           |
 | `wiki-rebuild`          | Archive, rebuild from scratch, or restore         | `/wiki-rebuild`          |
 | `wiki-query`            | Answer questions from the wiki                    | `/wiki-query`            |
-| `wiki-narrate`          | Render a cited narrative from a wiki topic        | `/wiki-narrate <topic>` |
+| `wiki-narrate`          | Render a cited narrative from a wiki topic        | `/wiki-narrate <topic>`  |
 | `wiki-lint`             | Find broken links, orphans, contradictions        | `/wiki-lint`             |
 | `cross-linker`          | Auto-discover and insert missing wikilinks        | `/cross-linker`          |
 | `tag-taxonomy`          | Enforce consistent tag vocabulary across pages    | `/tag-taxonomy`          |

@@ -26,6 +26,8 @@ You are performing a health check on an Obsidian wiki. Your goal is to find and 
 
 Run these checks in order. Report findings as you go.
 
+**Scope:** skip `_archives/`, `_raw/`, `_readouts/`, and `.obsidian/` in every check. These hold frozen snapshots, unprocessed staging drafts, and derived readouts (saved by `wiki-narrate`) — they are not knowledge-graph pages, so orphan, frontmatter, and link checks don't apply to them.
+
 ### 1. Orphaned Pages
 
 Find pages with zero incoming wikilinks. These are knowledge islands that nothing connects to.
