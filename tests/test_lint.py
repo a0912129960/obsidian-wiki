@@ -205,6 +205,20 @@ def test_lint_excludes_raw_markdown_from_page_lint(tmp_path: Path) -> None:
     assert report["findings"]["orphan_pages"] == []
 
 
+def test_lint_exempts_tag_taxonomy_from_content_page_requirements(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    taxonomy = vault / "_meta" / "taxonomy.md"
+    taxonomy.parent.mkdir(parents=True)
+    taxonomy.write_text("---\ntitle: Tag Taxonomy\n---\n\n# Tag Taxonomy\n", encoding="utf-8")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["stats"]["pages"] == 1
+    assert report["findings"]["missing_frontmatter"] == []
+    assert report["findings"]["missing_summaries"] == []
+    assert report["findings"]["orphan_pages"] == []
+
+
 def test_lint_still_reports_missing_page_link(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(vault, "concepts/alpha.md", links=["missing-page"])

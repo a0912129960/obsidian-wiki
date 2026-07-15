@@ -3,8 +3,8 @@
 Python port of ``setup.sh`` for the pip-installed package. The skill content
 lives inside the installed package (``obsidian_wiki/_data/skills``) instead of a
 cloned repo, so this wires the bundled skills into every supported AI agent's
-skills directory and writes ``~/.obsidian-wiki/config`` so the skills resolve
-the vault from any project.
+skills directory. Initial setup creates ``~/.obsidian-wiki/config``; later
+setup and skill-refresh runs preserve that user-owned file unchanged.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from obsidian_wiki import __version__
 HOME = Path.home()
 GLOBAL_CONFIG_DIR = HOME / ".obsidian-wiki"
 GLOBAL_CONFIG = GLOBAL_CONFIG_DIR / "config"
+INSTALL_STATE = GLOBAL_CONFIG_DIR / "install-state.json"
 
 # Skills usable from any project (no vault context needed beyond the global
 # config). These are also installed globally for agents that only scope skills
@@ -243,7 +244,7 @@ def install_project(project_dir: Path, mode: str) -> None:
 def _read_config_value(key: str) -> str:
     if not GLOBAL_CONFIG.is_file():
         return ""
-    for line in GLOBAL_CONFIG.read_text().splitlines():
+    for line in GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines():
         if line.startswith(f"{key}="):
             return line.split("=", 1)[1].strip().strip('"')
     return ""
@@ -253,7 +254,7 @@ def _read_config() -> dict[str, str]:
     if not GLOBAL_CONFIG.is_file():
         return {}
     values: dict[str, str] = {}
-    for raw in GLOBAL_CONFIG.read_text().splitlines():
+    for raw in GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -285,14 +286,32 @@ def write_config(vault_path: str) -> None:
     repo_root = skills_dir().parent
     GLOBAL_CONFIG.write_text(
         f'OBSIDIAN_VAULT_PATH="{vault_path}"\n'
-        f'OBSIDIAN_WIKI_REPO="{repo_root}"\n'
-        f'OBSIDIAN_WIKI_VERSION="{__version__}"\n'
+        f'OBSIDIAN_WIKI_REPO="{repo_root}"\n',
+        encoding="utf-8",
     )
     print(f"✅  Global config written to {GLOBAL_CONFIG}")
 
 
+def _write_install_state(mode: str) -> None:
+    GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    INSTALL_STATE.write_text(
+        json.dumps({"version": __version__, "mode": mode}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _read_install_state() -> dict[str, str]:
+    if not INSTALL_STATE.is_file():
+        return {}
+    try:
+        data = json.loads(INSTALL_STATE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _check_stale() -> None:
-    """Warn if the installed version doesn't match when setup last ran, or if skills are missing."""
+    """Warn if installed skills are stale or missing."""
     if not GLOBAL_CONFIG.is_file():
         print(
             f"⚠️  obsidian-wiki {__version__} is installed but setup has never been run.\n"
@@ -301,11 +320,18 @@ def _check_stale() -> None:
         )
         return
 
-    setup_version = _read_config_value("OBSIDIAN_WIKI_VERSION")
-    if setup_version and setup_version != __version__:
+    install_version = _read_install_state().get("version", "")
+    if not install_version:
         print(
-            f"⚠️  obsidian-wiki upgraded {setup_version} → {__version__} but setup hasn't been re-run.\n"
-            f"   New skills won't be available until you run: obsidian-wiki setup",
+            "⚠️  skill install version is not recorded.\n"
+            "   Run: obsidian-wiki install-skills",
+            file=sys.stderr,
+        )
+        return
+    if install_version != __version__:
+        print(
+            f"⚠️  obsidian-wiki upgraded {install_version} → {__version__} but skills haven't been refreshed.\n"
+            "   Run: obsidian-wiki install-skills",
             file=sys.stderr,
         )
         return
@@ -320,7 +346,7 @@ def _check_stale() -> None:
             print(
                 f"⚠️  {len(missing)} skill(s) missing from ~/.claude/skills/ "
                 f"(e.g. {', '.join(sorted(missing)[:3])}{', ...' if len(missing) > 3 else ''}).\n"
-                f"   Run: obsidian-wiki setup",
+                f"   Run: obsidian-wiki install-skills",
                 file=sys.stderr,
             )
 
@@ -438,22 +464,30 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             hint="",
         )
 
-    setup_version = config.get("OBSIDIAN_WIKI_VERSION", "") if config_present else ""
-    if setup_version and setup_version != __version__:
+    install_version = _read_install_state().get("version", "")
+    if install_version and install_version != __version__:
         _doctor_add(
             checks,
-            name="setup-version",
+            name="install-version",
             status="warn",
-            detail=f"setup ran with {setup_version}; installed package is {__version__}",
-            hint="run: obsidian-wiki setup",
+            detail=f"skills installed with {install_version}; installed package is {__version__}",
+            hint="run: obsidian-wiki install-skills",
         )
-    elif config_present:
+    elif install_version:
         _doctor_add(
             checks,
-            name="setup-version",
+            name="install-version",
             status="pass",
-            detail=f"setup version matches installed package ({__version__})" if setup_version else "setup version not recorded",
-            hint="" if setup_version else "re-run setup to record install metadata",
+            detail=f"skill install version matches installed package ({__version__})",
+            hint="",
+        )
+    else:
+        _doctor_add(
+            checks,
+            name="install-version",
+            status="warn",
+            detail="skill install version not recorded",
+            hint="run: obsidian-wiki install-skills",
         )
 
     if vault is not None:
@@ -523,7 +557,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             name="agent-installs",
             status="warn",
             detail="no global agent skill installs found",
-            hint="run: obsidian-wiki setup",
+            hint="run: obsidian-wiki install-skills",
         )
     elif partial_agents:
         _doctor_add(
@@ -531,7 +565,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             name="agent-installs",
             status="warn",
             detail="; ".join(agent_summaries),
-            hint="re-run obsidian-wiki setup to fill missing skills",
+            hint="run: obsidian-wiki install-skills to fill missing skills",
         )
     else:
         _doctor_add(
@@ -588,11 +622,25 @@ def cmd_setup(args: argparse.Namespace) -> int:
     print("║         obsidian-wiki — Agent Setup              ║")
     print("╚══════════════════════════════════════════════════╝\n")
 
-    vault_path = resolve_vault_path(args.vault)
-    write_config(vault_path)
+    config_exists = GLOBAL_CONFIG.is_file()
+    if config_exists:
+        if args.vault is not None:
+            print(
+                "error: config already exists; setup will not overwrite user-owned config. "
+                f"Edit {GLOBAL_CONFIG} explicitly to change OBSIDIAN_VAULT_PATH.",
+                file=sys.stderr,
+            )
+            return 1
+        vault_path = _read_config_value("OBSIDIAN_VAULT_PATH")
+        print(f"✅  Existing config preserved unchanged: {GLOBAL_CONFIG}")
+    else:
+        vault_path = resolve_vault_path(args.vault)
+        write_config(vault_path)
     if not vault_path:
-        print("    → Vault path not set yet. Re-run with `--vault /path/to/vault`")
-        print("      or edit OBSIDIAN_VAULT_PATH in ~/.obsidian-wiki/config.")
+        if config_exists:
+            print("    → Vault path is not set. Edit OBSIDIAN_VAULT_PATH in ~/.obsidian-wiki/config.")
+        else:
+            print("    → Vault path not set yet. Edit OBSIDIAN_VAULT_PATH in ~/.obsidian-wiki/config.")
 
     if not args.project_only:
         print()
@@ -601,6 +649,8 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if args.project is not None:
         project_dir = Path(args.project or os.getcwd()).expanduser().resolve()
         install_project(project_dir, mode)
+
+    _write_install_state(mode)
 
     n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
@@ -615,6 +665,23 @@ def cmd_setup(args: argparse.Namespace) -> int:
     print("   /wiki-update    → sync knowledge into your vault")
     print("   /wiki-query     → ask questions against your wiki")
     print("───────────────────────────────────────────────────\n")
+    return 0
+
+
+def cmd_install_skills(args: argparse.Namespace) -> int:
+    """Refresh agent skills without reading or writing the user's config."""
+    mode = "copy" if args.copy else "symlink"
+    print("\nobsidian-wiki — Skill Install\n")
+
+    if not args.project_only:
+        install_global_skills(mode)
+
+    if args.project is not None:
+        project_dir = Path(args.project or os.getcwd()).expanduser().resolve()
+        install_project(project_dir, mode)
+
+    _write_install_state(mode)
+    print(f"\n✅  Skills refreshed (mode: {mode}); config was not modified.\n")
     return 0
 
 
@@ -894,9 +961,9 @@ def cmd_info(args: argparse.Namespace) -> int:
     print(f"config:    {GLOBAL_CONFIG}{'' if GLOBAL_CONFIG.exists() else ' (not written yet)'}")
     if GLOBAL_CONFIG.exists():
         vp = _read_config_value("OBSIDIAN_VAULT_PATH")
-        setup_ver = _read_config_value("OBSIDIAN_WIKI_VERSION")
         print(f"vault:     {vp or '(unset)'}")
-        print(f"setup ran: {setup_ver or '(never)'}")
+    install_version = _read_install_state().get("version", "")
+    print(f"skills installed: {install_version or '(not recorded)'}")
     print(f"bundled skills: {len(bundled)}")
     print()
     print("Agent skill install status:")
@@ -912,7 +979,7 @@ def cmd_info(args: argparse.Namespace) -> int:
         status = "✅" if not missing else "⚠️ "
         print(f"  {status} {label}: {len(wiki_installed)}/{len(bundled_set)}", end="")
         if missing:
-            print(f"  (run: obsidian-wiki setup)", end="")
+            print(f"  (run: obsidian-wiki install-skills)", end="")
         print()
     _check_stale()
     return 0
@@ -927,9 +994,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-V", "--version", action="version", version=f"obsidian-wiki {__version__}")
     sub = p.add_subparsers(dest="command")
 
-    sp = sub.add_parser("setup", help="install skills into your agents and write config (default)")
+    sp = sub.add_parser("setup", help="initialize config if missing and install skills (default)")
     _add_setup_args(sp)
     sp.set_defaults(func=cmd_setup)
+
+    isp = sub.add_parser(
+        "install-skills",
+        aliases=["update-skills"],
+        help="refresh agent skills without modifying config",
+    )
+    _add_install_skills_args(isp)
+    isp.set_defaults(func=cmd_install_skills)
 
     lp = sub.add_parser("list", help="list bundled skills")
     lp.set_defaults(func=cmd_list)
@@ -1074,7 +1149,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_setup_args(sp: argparse.ArgumentParser) -> None:
-    sp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
+    sp.add_argument(
+        "--vault",
+        metavar="PATH",
+        help="absolute path for initial config creation; rejected when config already exists",
+    )
     sp.add_argument(
         "--project",
         nargs="?",
@@ -1082,6 +1161,28 @@ def _add_setup_args(sp: argparse.ArgumentParser) -> None:
         default=None,
         metavar="DIR",
         help="also install project-local skills + bootstrap files into DIR "
+        "(defaults to the current directory if no DIR given)",
+    )
+    sp.add_argument(
+        "--project-only",
+        action="store_true",
+        help="skip the global agent install (use with --project)",
+    )
+    sp.add_argument(
+        "--copy",
+        action="store_true",
+        help="copy skill files instead of symlinking to the installed package",
+    )
+
+
+def _add_install_skills_args(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument(
+        "--project",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="DIR",
+        help="also refresh project-local skills + bootstrap files in DIR "
         "(defaults to the current directory if no DIR given)",
     )
     sp.add_argument(
@@ -1106,13 +1207,15 @@ def main(argv: list[str] | None = None) -> int:
     if not getattr(args, "func", None):
         parser.print_help()
         return 0
-    # Warn about stale installs on every command except `setup` (which fixes it)
+    # Warn about stale installs on every command except commands that fix or report it
     # and `info` (which calls _check_stale itself with richer output).
-    if getattr(args, "command", None) not in ("setup", "info", "doctor", None):
+    if getattr(args, "command", None) not in (
+        "setup", "install-skills", "update-skills", "info", "doctor", None
+    ):
         _check_stale()
     try:
         return args.func(args)
-    except (FileNotFoundError, RuntimeError) as exc:
+    except (FileNotFoundError, OSError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

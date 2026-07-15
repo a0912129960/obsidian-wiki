@@ -6,7 +6,7 @@
 #
 # What it does:
 #   1. Creates .env from .env.example (if not present)
-#   2. Writes ~/.obsidian-wiki/config so skills work from any project
+#   2. Creates ~/.obsidian-wiki/config only when it does not already exist
 #   3. Symlinks .skills/* into each agent's expected skills directory:
 #      Project-local:
 #        - .claude/skills/        (Claude Code)
@@ -116,32 +116,37 @@ GLOBAL_CONFIG_DIR="$HOME/.obsidian-wiki"
 GLOBAL_CONFIG="$GLOBAL_CONFIG_DIR/config"
 mkdir -p "$GLOBAL_CONFIG_DIR"
 
-# Read vault path from .env if it's already set
-VAULT_PATH=""
-if [ -f "$SCRIPT_DIR/.env" ]; then
-  # Strip quotes if present, but preserve the path (spaces or not)
-  VAULT_PATH=$(grep -E '^OBSIDIAN_VAULT_PATH=' "$SCRIPT_DIR/.env" | cut -d'=' -f2- | sed 's/^"//;s/"$//')
-fi
-
-# If vault path is empty or placeholder, ask the user
-if [ -z "$VAULT_PATH" ] || [ "$VAULT_PATH" = "/path/to/your/vault" ]; then
-  echo ""
-  read -p "  Where is your Obsidian vault? (absolute path): " VAULT_PATH || true
-  if [ -n "$VAULT_PATH" ]; then
-    # Escape the path for sed: replace '/' with '\/' and '"' with '\"'
-    ESCAPED_PATH=$(printf '%s\n' "$VAULT_PATH" | sed -e 's/[\/&]/\\&/g' -e 's/"/\\"/g')
-    # Update .env with quoted path to preserve spaces
-    sed -i.bak "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=\"$ESCAPED_PATH\"|" "$SCRIPT_DIR/.env"
-    rm -f "$SCRIPT_DIR/.env.bak"
+if [ -f "$GLOBAL_CONFIG" ]; then
+  VAULT_PATH=$(grep -E '^OBSIDIAN_VAULT_PATH=' "$GLOBAL_CONFIG" | cut -d'=' -f2- | sed 's/^"//;s/"$//')
+  echo "✅  Existing config preserved unchanged: ~/.obsidian-wiki/config"
+else
+  # Read vault path from .env if it's already set
+  VAULT_PATH=""
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    # Strip quotes if present, but preserve the path (spaces or not)
+    VAULT_PATH=$(grep -E '^OBSIDIAN_VAULT_PATH=' "$SCRIPT_DIR/.env" | cut -d'=' -f2- | sed 's/^"//;s/"$//')
   fi
-fi
 
-# Write global config with quoted path (preserves spaces)
-cat > "$GLOBAL_CONFIG" <<EOF
+  # If vault path is empty or placeholder, ask the user
+  if [ -z "$VAULT_PATH" ] || [ "$VAULT_PATH" = "/path/to/your/vault" ]; then
+    echo ""
+    read -p "  Where is your Obsidian vault? (absolute path): " VAULT_PATH || true
+    if [ -n "$VAULT_PATH" ]; then
+      # Escape the path for sed: replace '/' with '\/' and '"' with '\"'
+      ESCAPED_PATH=$(printf '%s\n' "$VAULT_PATH" | sed -e 's/[\/&]/\\&/g' -e 's/"/\\"/g')
+      # Update .env with quoted path to preserve spaces
+      sed -i.bak "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=\"$ESCAPED_PATH\"|" "$SCRIPT_DIR/.env"
+      rm -f "$SCRIPT_DIR/.env.bak"
+    fi
+  fi
+
+  # Create the global config once. Subsequent runs never modify it.
+  cat > "$GLOBAL_CONFIG" <<EOF
 OBSIDIAN_VAULT_PATH="$VAULT_PATH"
 OBSIDIAN_WIKI_REPO="$SCRIPT_DIR"
 EOF
-echo "✅  Global config written to ~/.obsidian-wiki/config"
+  echo "✅  Global config created at ~/.obsidian-wiki/config"
+fi
 
 # ── Step 1c: Bootstrap symlinks ──────────────────────────────
 # .hermes.md → AGENTS.md  (Hermes resolves .hermes.md before AGENTS.md;
@@ -241,8 +246,6 @@ GITIGNORE
       git -C "$VAULT_PATH" remote add origin "$VAULT_REMOTE"
     fi
     echo "✅  Git remote → $VAULT_REMOTE"
-    # Persist remote in global config
-    echo "VAULT_GITHUB_REMOTE=\"$VAULT_REMOTE\"" >> "$GLOBAL_CONFIG"
     # Write ~/.obsidian-wiki/sync.sh
     cat > "$GLOBAL_CONFIG_DIR/sync.sh" <<'SYNC_SCRIPT'
 #!/bin/bash

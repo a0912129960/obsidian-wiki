@@ -21,6 +21,7 @@ REQUIRED_FRONTMATTER = (
     "lifecycle",
 )
 RESERVED_PAGE_STEMS = frozenset({"index", "log", "hot", "_insights"})
+RESERVED_PAGE_PATHS = frozenset({"_meta/taxonomy.md"})
 ALLOWED_RELATIONSHIP_TYPES = frozenset(
     {"extends", "implements", "contradicts", "derived_from", "uses", "replaces", "related_to"}
 )
@@ -57,6 +58,10 @@ def _iter_attachments(vault: Path) -> list[Path]:
         for path in attachments_dir.rglob("*")
         if path.is_file() and path.suffix.lower() != ".md"
     ]
+
+
+def _is_reserved_page(page: dict[str, Any]) -> bool:
+    return page["slug"] in RESERVED_PAGE_STEMS or page["path"] in RESERVED_PAGE_PATHS
 
 
 def _wikilink_target(raw: str) -> str:
@@ -253,7 +258,7 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
 
     missing_frontmatter = []
     for page in pages:
-        if page["slug"] in RESERVED_PAGE_STEMS:
+        if _is_reserved_page(page):
             continue
         missing = [field for field in REQUIRED_FRONTMATTER if field not in page["fields"]]
         if missing:
@@ -272,13 +277,13 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
     missing_summaries = [
         page["path"]
         for page in pages
-        if page["slug"] not in RESERVED_PAGE_STEMS
+        if not _is_reserved_page(page)
         and ("summary" not in page["fields"] or not page["summary"])
     ]
 
     orphan_pages = []
     for page in pages:
-        if page["slug"] in RESERVED_PAGE_STEMS:
+        if _is_reserved_page(page):
             continue
         outgoing = sum(1 for target in page["links"] if target in by_slug and target != page["slug"])
         if outgoing == 0 and incoming.get(page["slug"], 0) == 0:

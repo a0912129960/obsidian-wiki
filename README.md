@@ -40,7 +40,17 @@ pip install obsidian-wiki
 obsidian-wiki setup --vault /path/to/your/digital/brain
 ```
 
-`obsidian-wiki setup` writes the config to `~/.obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Skills are symlinked to the installed package, so `pip install -U obsidian-wiki` upgrades them everywhere — just re-run `obsidian-wiki setup` to pick up new skills. Then open a project in your agent and say **"set up my wiki"**.
+On the first run, `obsidian-wiki setup` creates `~/.obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Once that config exists it is user-owned: later setup runs preserve it byte-for-byte, and `--vault` is rejected instead of overwriting it.
+
+To update, keep package and skill installation separate:
+
+```bash
+pip install -U obsidian-wiki
+obsidian-wiki install-skills          # refresh links; never modifies config
+obsidian-wiki install-skills --copy   # Windows fallback without symlink privilege
+```
+
+For a local editable checkout, use `pip install -e .` instead of `pip install -U obsidian-wiki`, then run the same `install-skills` command. Open a new agent session after refreshing skills.
 
 ```bash
 obsidian-wiki list              # list the bundled skills
@@ -51,10 +61,20 @@ obsidian-wiki lint              # lint the configured vault for broken links / m
 obsidian-wiki trust-check --strict  # CI/scheduled gate for approved manual review fingerprints
 obsidian-wiki trust-record --all --reviewed-at <ISO-with-timezone> --approved  # record a human-approved full review
 obsidian-wiki setup --project . # also drop project-local skills + AGENTS.md into the current repo
-obsidian-wiki setup --copy      # copy skill files instead of symlinking
+obsidian-wiki install-skills --copy  # refresh skills without modifying config
 ```
 
 `OBSIDIAN_VAULT_PATH` is just any directory where you want your digital brain to live, a new empty folder or an existing Obsidian vault. Omit `--vault` to be prompted (or set it later in `~/.obsidian-wiki/config`).
+
+For a reusable personal default, keep a user-owned template at `~/.obsidian-wiki/default.env`. After customizing a working config, save and restore it explicitly:
+
+```powershell
+Copy-Item "$HOME\.obsidian-wiki\config" "$HOME\.obsidian-wiki\default.env"
+# Restore only when you explicitly intend to replace config:
+Copy-Item "$HOME\.obsidian-wiki\default.env" "$HOME\.obsidian-wiki\config"
+```
+
+Neither `setup` nor `install-skills` modifies `default.env`, and an existing `config` is never regenerated from the template automatically.
 
 ### Local CLI utilities
 
@@ -96,7 +116,7 @@ cd obsidian-wiki
 bash setup.sh
 ```
 
-`setup.sh` asks for your vault (path to your digital brain) path, writes the config to `~/.obsidian-wiki/config`, symlinks skills into all your agents, and installs `wiki-update` globally so you can use it from any project.
+When config is missing, `setup.sh` asks for your vault path and creates `~/.obsidian-wiki/config`. If config already exists, it is preserved unchanged. The script also symlinks skills into your agents and installs `wiki-update` globally so you can use it from any project.
 
 Open the project in your agent and say **"set up my wiki"**. That's it.
 

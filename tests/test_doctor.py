@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from obsidian_wiki.cli import list_skills
+from obsidian_wiki import __version__
 
 
 def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -46,6 +47,12 @@ def _install_all_skills(home: Path) -> None:
         skill_dir = target / name
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "install-state.json").write_text(
+        json.dumps({"version": __version__, "mode": "copy"}) + "\n",
+        encoding="utf-8",
+    )
 
 
 def test_doctor_json_clean_install(tmp_path: Path) -> None:
@@ -96,10 +103,15 @@ def test_doctor_strict_turns_warnings_into_nonzero_exit(tmp_path: Path) -> None:
     home = tmp_path / "home"
     vault = tmp_path / "vault"
     _make_vault(vault)
-    _write_config(home, vault, version="0.0.0")
+    _write_config(home, vault, version="user-owned-value")
+    config_dir = home / ".obsidian-wiki"
+    (config_dir / "install-state.json").write_text(
+        json.dumps({"version": "0.0.0", "mode": "copy"}) + "\n",
+        encoding="utf-8",
+    )
 
     proc = _run(home, "doctor", "--json", "--strict")
 
     assert proc.returncode == 1
     data = json.loads(proc.stdout)
-    assert any(check["name"] == "setup-version" and check["status"] == "warn" for check in data["checks"])
+    assert any(check["name"] == "install-version" and check["status"] == "warn" for check in data["checks"])

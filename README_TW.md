@@ -39,7 +39,17 @@ pip install obsidian-wiki
 obsidian-wiki setup --vault /path/to/your/digital/brain
 ```
 
-`obsidian-wiki setup` 會把設定寫到 `~/.obsidian-wiki/config`，並把所有 wiki skills 安裝到你的 AI agents（Claude Code、Cursor、Codex、Gemini、Hermes、Pi 等）。Skills 會 symlink 到已安裝的 package，所以 `pip install -U obsidian-wiki` 會在同一處升級它們；之後重新執行 `obsidian-wiki setup` 即可讓所有 agent 取得新 skills。接著在 agent 中開啟一個 project，說 **"set up my wiki"**。
+`obsidian-wiki setup` 只會在第一次建立 `~/.obsidian-wiki/config`，並把所有 wiki skills 安裝到你的 AI agents（Claude Code、Cursor、Codex、Gemini、Hermes、Pi 等）。Config 建立後完全由使用者擁有：後續 setup 會保留其每一個 byte，若再傳 `--vault` 會拒絕執行，不會隱含覆寫。
+
+更新時將 package 與 skills 分開：
+
+```bash
+pip install -U obsidian-wiki
+obsidian-wiki install-skills          # 更新 links，絕不修改 config
+obsidian-wiki install-skills --copy   # Windows 沒有 symlink 權限時使用
+```
+
+若是本機 editable checkout，將第一行改為 `pip install -e .`，再執行同一個 `install-skills` 指令。更新 skills 後建議重開 agent session。
 
 ```bash
 obsidian-wiki list              # 列出內建 skills
@@ -48,10 +58,20 @@ obsidian-wiki doctor            # 檢查 config、vault 結構與已安裝 skill
 obsidian-wiki query "rate limiting"  # 從終端查詢已設定的 vault
 obsidian-wiki lint              # 檢查已設定 vault 的 broken links / metadata gaps
 obsidian-wiki setup --project . # 也把 project-local skills + AGENTS.md 放到目前 repo
-obsidian-wiki setup --copy      # 複製 skill 檔案，而不是 symlink
+obsidian-wiki install-skills --copy  # 更新 skills，不修改 config
 ```
 
 `OBSIDIAN_VAULT_PATH` 可以是任何你想存放數位大腦的目錄；它可以是新的空資料夾，也可以是既有的 Obsidian vault。省略 `--vault` 時會提示你輸入，或之後在 `~/.obsidian-wiki/config` 中設定。
+
+若要建立個人 default config，可在完成自訂後明確備份與還原：
+
+```powershell
+Copy-Item "$HOME\.obsidian-wiki\config" "$HOME\.obsidian-wiki\default.env"
+# 只在確定要取代 config 時才還原：
+Copy-Item "$HOME\.obsidian-wiki\default.env" "$HOME\.obsidian-wiki\config"
+```
+
+`setup` 與 `install-skills` 都不會修改 `default.env`，也不會自動用範本重建既有 config。
 
 ### 本機 CLI 工具
 
@@ -93,7 +113,7 @@ cd obsidian-wiki
 bash setup.sh
 ```
 
-`setup.sh` 會詢問你的 vault（數位大腦）路徑，將設定寫入 `~/.obsidian-wiki/config`，把 skills symlink 到所有 agent，並全域安裝 `wiki-update`，讓你能從任何 project 使用它。
+當 config 不存在時，`setup.sh` 會詢問 vault（數位大腦）路徑並建立 `~/.obsidian-wiki/config`；如果 config 已存在，會原樣保留。腳本也會把 skills symlink 到所有 agent，並全域安裝 `wiki-update`。
 
 在你的 agent 中開啟 project，說 **"set up my wiki"**。就完成了。
 
