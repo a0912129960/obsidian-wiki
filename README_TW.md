@@ -293,7 +293,7 @@ cd /path/to/obsidian-wiki && pi "set up my wiki"
 
 - **QMD semantic search（可選）.** [QMD](https://github.com/tobi/qmd) 會為你的 wiki 與 source documents 建立 semantic search index。當 `.env` 設定 `QMD_WIKI_COLLECTION` 時，`wiki-query` 會先對 collection 執行 lex+vec pass，再 fallback 到 Grep，讓 exact-string search 找不到的 concept-level matches 也能被找到。設定 `QMD_PAPERS_COLLECTION` 時，`wiki-ingest` 會在寫新 page 前查詢 indexed sources，以找出 related work、detect contradictions，並決定建立或合併。QMD 可以透過 MCP 或 local CLI 使用。沒有 QMD 時，兩個 skills 都會 fallback 到 Grep/Glob，仍完全可用。
 
-- **`_raw/` staging directory.** 把 rough notes、clipboard pastes 或 quick captures 放進 vault 裡的 `_raw/`。成功蒸餾並更新 manifest 後，`wiki-ingest` 會把來源移入 `_raw/_archived/`。Capture files 先放在 `_raw/assets/`；只有正式頁面實際引用且承載知識的檔案會發布到 `attachments/`，全部原始 assets 則在整批成功後移入 `_raw/_archived/assets/`。透過 `.env` 的 `OBSIDIAN_RAW_DIR` 設定（預設 `_raw`）。
+- **`_raw/` staging directory.** 把 rough notes、clipboard pastes 或 quick captures 放進 vault 裡的 `_raw/`。成功蒸餾並更新 manifest 後，`wiki-ingest` 會把來源移入 `_raw/_archived/`。Capture files 先放在 `_raw/assets/`；每次 ingest 會在 manifest 中認領整個 flat pool，只有正式頁面實際引用且承載知識的檔案會發布到 `attachments/`，全部原始 assets 則在該批次成功後移入 `_raw/_archived/assets/`。透過 `.env` 的 `OBSIDIAN_RAW_DIR` 設定（預設 `_raw`）。
 
 ## 可選：QMD Semantic Search
 
@@ -328,9 +328,9 @@ cd /path/to/obsidian-wiki && pi "set up my wiki"
 
 `_raw/` 是 vault 內用來放未處理 captures 的 staging area，例如 rough notes、clipboard pastes、quick voice-memo transcripts。把檔案丟進去，下一次 `wiki-ingest` 會把它們 promote 成正式 wiki pages。來源成功蒸餾並寫入 manifest 後，會移入 `_raw/_archived/`，而不是被刪除。
 
-`_raw/assets/` 是 captured 或 downloaded files 的共用 staging pool；Raw Mode 不會把其中檔案當成獨立來源 ingest。正式頁面只能 embed vault 根層 `attachments/` 下的檔案。蒸餾時，`wiki-ingest` 只發布實際引用的 diagrams、charts、screenshots、figures 與 documents，並使用來源 slug、語意用途及短 SHA-256 hash 組成檔名。裝飾性、runtime、tracking 與未使用的 web files 只歸檔，不進入正式附件區。
+`_raw/assets/` 是 captured 或 downloaded files 的共用 flat staging pool；Raw Mode 不會把其中檔案當成獨立來源 ingest。處理前，每次 ingest invocation 會在 `.manifest.json` 認領整個 pool，並用 SHA-256 記錄每個 raw、staged、published 與 archived path。既有批次尚未完成時，必須先續作或處理完成，不能加入另一批檔案。正式頁面只能 embed vault 根層 `attachments/` 下的檔案。蒸餾時，`wiki-ingest` 只發布實際引用的 diagrams、charts、screenshots、figures 與 documents，檔名統一為 `<source-slug>-<purpose>-<hash8>.<ext>`。裝飾性、runtime、tracking 與未使用的 web files 只歸檔，不進入正式附件區。
 
-整批所有 eligible sources 成功後，`_raw/assets/` 的全部原始檔會移入 `_raw/_archived/assets/`，並留下空的 staging directory。若部分失敗，`_raw/assets/` 保持不動。`_raw/_archived/` 不會在之後重新處理；top-level 來源目錄也只有在其中所有 eligible sources 都成功後才整體歸檔。
+該批次所有 eligible sources 成功後，`_raw/assets/` 的全部原始檔會移入 `_raw/_archived/assets/`，並留下空的 staging directory。若部分失敗，`_raw/assets/` 保持不動。設定 `WIKI_STAGED_WRITES=true` 時，衍生副本先放在 `_staging/attachments/`；只有所有關聯頁面都由 `/wiki-stage-commit` 接受後才發布並封存 raw batch，退回或略過都保留原始檔。`_raw/_archived/` 不會在之後重新處理；top-level 來源目錄也只有在其中所有 eligible sources 都成功後才整體歸檔。
 
 在 live coding session 中餵資料給 `_raw/` 的最快方式是 `/wiki-capture --quick`：它會掃描目前 conversation，抽出 bugs 與 gotchas，並在 60 秒內寫出 structured draft files，不使用 subagents，也不寫 manifest。
 
@@ -359,7 +359,7 @@ awk -F= '/^OBSIDIAN_VAULT_PATH=/{print $2 "/_raw"; exit}' "$(git rev-parse --sho
 /wiki-ingest promote my raw pages
 ```
 
-`wiki-ingest` 會讀取每個 eligible `_raw/` capture，蒸餾到正確的 wiki pages，把實際引用且承載知識的檔案發布到 `attachments/`，並更新 manifest/index/log。成功的來源會移入 `_raw/_archived/`；整批成功後，原始 assets 會移入 `_raw/_archived/assets/`，並清空 `_raw/assets/` 供下次 capture 使用。
+`wiki-ingest` 會讀取每個 eligible `_raw/` capture，蒸餾到正確的 wiki pages，把實際引用且承載知識的檔案發布到 `attachments/`，並更新 manifest/index/log。成功的來源會移入 `_raw/_archived/`；manifest 認領的整批 assets 成功後，原始檔會移入 `_raw/_archived/assets/`，並清空 `_raw/assets/` 供下次 capture 使用。Staged-write mode 則會等 `/wiki-stage-commit` 核准後才發布與封存。
 
 ---
 

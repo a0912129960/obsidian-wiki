@@ -48,7 +48,9 @@ Use `WebFetch` to retrieve the content at the provided URL (or skip if `defuddle
 - If the page is paywalled, JS-rendered (blank body), or returns an error: create a **stub page** with the title (inferred from the URL), the URL, and `stub: true` in frontmatter. Append this to the body: `> [Stub] Page could not be fetched — enrich manually.` Then skip to Step U7.
 - If the page fetches successfully: proceed to Step U2.
 
-When the fetch downloads companion files, stage them in `$OBSIDIAN_VAULT_PATH/_raw/assets/`. Do not embed that path in the formal page. Follow **Publish and archive raw assets** in the main `wiki-ingest/SKILL.md`: publish only knowledge-bearing files actually used by the final page, name them with the page slug, semantic purpose, and short content hash, and embed the resulting `attachments/` path. Keep decorative, runtime, tracking, and unused web assets out of `attachments/`.
+Before downloading companion files, apply the asset-batch ownership rules in **Publish and archive raw assets** in the main `wiki-ingest/SKILL.md`: if another non-terminal batch exists, resume or report it and do not download into the shared pool. Otherwise stage the downloads in `$OBSIDIAN_VAULT_PATH/_raw/assets/`, then immediately snapshot the entire resulting flat pool by exact path and SHA-256 into one batch owned by this URL ingest before consuming any asset. Do not create a per-URL folder or infer ownership from filenames.
+
+Do not embed the raw path in the formal page. Publish only knowledge-bearing files actually used by the final page, name them with the page slug, semantic purpose, and short content hash, and embed the resulting `attachments/` path. Keep decorative, runtime, tracking, and unused web assets out of `attachments/`. With staged writes, derived copies go to `_staging/attachments/` and originals remain in `_raw/assets/` until review completes.
 
 ## Step U2: Check for Duplicate
 
@@ -250,6 +252,7 @@ If a `## References` section already exists, append to it. Update the `updated` 
   "ingested_at": "TIMESTAMP",
   "source_url": "https://...",
   "source_type": "url",
+  "asset_batch_id": "<batch-id-or-null>",
   "stub": false,
   "project": "<project-name or null>",
   "promotion_status": "<project-name or misc>",
@@ -278,7 +281,7 @@ Misc mode:
 
 **`hot.md`** — Update **Recent Activity** with what was just ingested — keep the last 3 operations. Update **Key Takeaways** if the page introduced a concept worth flagging. Update `updated` timestamp.
 
-**Raw asset finalization** — after the page, published attachment copies, manifest, index, and log all succeed, archive the original downloaded files from `_raw/assets/` into `_raw/_archived/assets/` by exact path, following the collision and success-boundary rules in the main skill. Keep `_raw/assets/` unchanged if this URL ingest fails or if it is part of a raw-mode run with another eligible source that failed.
+**Raw asset finalization** — in normal mode, after every source in the claimed batch plus its page, attachment copies, manifest, index, and log succeeds, archive every snapshotted original from `_raw/assets/` into `_raw/_archived/assets/` by exact path and set the batch to `archived`. Keep the entire pool unchanged and set `needs_rework` if any participant fails. With staged writes, set `awaiting_review`; leave both the raw pool and derived `_staging/attachments/` copies for `/wiki-stage-commit`, which alone may publish and archive them after all associated pages are accepted.
 
 ## Quality Checklist (URL sources)
 
@@ -291,7 +294,8 @@ Misc mode:
 - [ ] In project mode: project overview updated with link to new reference
 - [ ] In misc mode: `affinity` and `promotion_status` fields present
 - [ ] `.manifest.json`, `index.md`, and `log.md` updated
+- [ ] Source `asset_batch_id` and raw/staged/published/archived mappings are complete when assets participated
 - [ ] Stub pages reported to user if fetch failed
 - [ ] Formal embeds point only to `attachments/`; no page links to `_raw/assets/` or `_raw/_archived/`
-- [ ] Only referenced knowledge-bearing assets were published; all downloaded originals were archived after full success
+- [ ] Only referenced knowledge-bearing assets were published; the entire claimed batch was archived only after full success or complete staged acceptance
 - [ ] QMD refresh per the main SKILL.md (skip if `QMD_WIKI_COLLECTION` unset)

@@ -94,6 +94,12 @@ attachments/      # Published files used by formal wiki pages
 
 Enumerate only the other top-level children as raw-mode candidates. Ignore `.gitkeep`, dotfiles, and framework control files. Never ingest `_raw/assets/**` independently; files there are companion inputs for the current raw ingest. Never reprocess `_raw/_archived/**`.
 
+Before processing any staged asset, claim the **entire current flat pool** for this ingest invocation:
+
+1. Check `.manifest.json` for an `asset_batches` entry whose status is `processing`, `awaiting_review`, or `needs_rework`. If one exists, resume or report that batch; do not start another asset-consuming ingest and do not add files to the pool.
+2. Snapshot every file currently under `_raw/assets/` by exact vault-relative path and full SHA-256. Create one batch ID, record the canonical source keys that may consume it, and initialize each asset mapping with null `purpose`, `pages`, `staged_path`, `published_path`, and `archived_path` values as appropriate.
+3. Add that `asset_batch_id` to every participating source entry. The whole pool belongs to this invocation, even when only one source ultimately embeds a given file. Do not create per-source asset folders or infer ownership from filenames.
+
 For each eligible top-level file, finish distillation and its manifest update before moving that exact file into `_raw/_archived/`. A top-level directory may be processed recursively, but move the whole directory only after every eligible source inside it succeeds and all manifest updates are complete. If any source fails, leave the original directory and all of its contents in place; do not archive a partial result.
 
 This preserves immutable source records without equating the `_raw/` staging directory itself with the architecture's Raw Sources layer. Some drafts have no external copy, so archiving the successfully promoted source retains the only original record.
@@ -105,16 +111,21 @@ For each successfully distilled source, inspect its references to `_raw/assets/*
 - **Publish** only files that the final page actually embeds and that carry knowledge, such as diagrams, charts, screenshots, figures, or attached documents.
 - **Archive only** decorative or runtime web files such as favicons, tracking pixels, CSS, JavaScript, fonts, navigation graphics, and unused thumbnails. Do not copy them into `attachments/`.
 
-Copy each publishable file to the vault-root `attachments/` directory. Name it `<source-slug>-<purpose>-<hash8>.<ext>`, where `purpose` is a short semantic role such as `figure-1`, `architecture`, `results-chart`, or `document`, and `hash8` is the first eight lowercase hexadecimal characters of the file's SHA-256. Preserve the real extension. If the exact destination already exists with the same hash, reuse it; never overwrite different content. Rewrite the formal page to use an explicit vault-relative embed such as `![[attachments/<published-name>]]`. A formal page must never link to `_raw/assets/` or `_raw/_archived/`.
+Name each publishable file `<source-slug>-<purpose>-<hash8>.<ext>`, where `purpose` is a short semantic role such as `figure-1`, `architecture`, `results-chart`, or `document`, and `hash8` is the first eight lowercase hexadecimal characters of the file's SHA-256. Preserve the real extension. Rewrite the formal page to use an explicit final vault-relative embed such as `![[attachments/<published-name>]]`. A formal page must never link to `_raw/assets/`, `_raw/_archived/`, or `_staging/attachments/`.
 
-After the page, published attachment copies, and manifest update have succeeded, the source may move to `_raw/_archived/` under the normal per-file/per-directory rules above. Finalize the shared asset pool only after **all eligible sources in the current raw-mode run succeed**:
+- In normal mode, copy the file directly to vault-root `attachments/` and fill `published_path` in the batch mapping.
+- With `WIKI_STAGED_WRITES=true`, copy it to `_staging/attachments/<published-name>` and fill `staged_path`; keep `published_path` null. The staged page still embeds `attachments/<published-name>` so its content is ready for final promotion. Do not archive or clear `_raw/assets/` during ingest; `/wiki-stage-commit` owns publication and finalization.
+
+If the exact destination already exists with the same hash, reuse it; never overwrite different content. Record `purpose`, consuming `pages`, and every path transition in the batch mapping.
+
+After the page, published attachment copies, and manifest update have succeeded, the source may move to `_raw/_archived/` under the normal per-file/per-directory rules above. In normal mode, finalize the shared asset batch only after **all eligible sources in the current raw-mode run succeed**:
 
 1. Verify every formal embed resolves to `attachments/` and every published copy has the same SHA-256 as its raw source.
 2. Move every file remaining under `_raw/assets/` by exact path into `_raw/_archived/assets/`, preserving its relative layout.
 3. Never use wildcards, recursive deletion, or overwrite. On an archive collision, append a numeric suffix before the extension.
-4. Leave the empty `_raw/assets/` directory in place for the next capture.
+4. Update every mapping's `archived_path`, verify the raw path is gone, set the batch status to `archived`, and leave the empty `_raw/assets/` directory in place for the next capture.
 
-If any eligible source fails, do not archive or clear `_raw/assets/`. Published copies already committed for successful sources may remain because their hash-based names make retries idempotent. If there are raw assets but no eligible source, leave them in place and report them as pending rather than archiving them without provenance.
+If any eligible source fails, set the batch to `needs_rework` and do not archive or clear `_raw/assets/`. Published copies already committed for successful sources may remain because their hash-based names make retries idempotent. If there are raw assets but no eligible source, leave them in place and report them as pending rather than archiving them without provenance.
 
 **Source inheritance:** The `_raw/` path is a staging artifact — never use it as the `sources:` value on the promoted page. Derive the source entry from the `_raw/` file's own frontmatter instead:
 
@@ -221,7 +232,7 @@ Research papers (arXiv/conference PDFs) carry their substance in figures, equati
 
 1. **Read the text layer** for the narrative (problem, method, claims), then **re-read the figure- and equation-dense pages with vision** (`Read pages: "N"`) — the architecture/method figure (often Figure 1) and the main results table rarely live in the text layer.
 2. **Capture the method visually — prefer the paper's real figures.**
-   - **Embed the paper's own architecture/method figure as the primary visual.** Most arXiv figures are a single embedded raster. With PyMuPDF (`fitz`): use `page.get_image_info(xrefs=True)` to find the figure's `xref` and bbox — it is usually the wide image sitting just above its caption (locate the caption with `page.search_for("Figure N")`) — then `img = doc.extract_image(xref)` and save `img["image"]` to `attachments/<slug>-figN.<ext>` using the native `img["ext"]` (it may be JPEG, not PNG — don't hardcode the extension; downscale oversized figures, e.g. `sips -Z 1800 <file>`). If the figure is vector rather than raster (`extract_image` returns nothing and `page.get_drawings()` is non-empty), render the bbox region instead: `page.get_pixmap(clip=rect, matrix=fitz.Matrix(4, 4))` — compute `rect` by unioning `get_drawings()` rects (drawings-only; text blocks pull in body text) within one column above the caption, and in multi-column papers bound the window below the previous element so adjacent tables/text aren't caught; verify the render and re-crop if needed. Embed with `![[<slug>-figN.<ext>]]` plus an italic caption.
+   - **Embed the paper's own architecture/method figure as the primary visual.** Most arXiv figures are a single embedded raster. With PyMuPDF (`fitz`): use `page.get_image_info(xrefs=True)` to find the figure's `xref` and bbox — it is usually the wide image sitting just above its caption (locate the caption with `page.search_for("Figure N")`) — then `img = doc.extract_image(xref)` and use its native `img["ext"]` (it may be JPEG, not PNG). If the figure is vector rather than raster (`extract_image` returns nothing and `page.get_drawings()` is non-empty), render the bbox region instead: `page.get_pixmap(clip=rect, matrix=fitz.Matrix(4, 4))` — compute `rect` by unioning `get_drawings()` rects (drawings-only; text blocks pull in body text) within one column above the caption, and in multi-column papers bound the window below the previous element so adjacent tables/text aren't caught; verify and re-crop if needed. After any downscaling, hash the final bytes and name the output `<slug>-figure-N-<hash8>.<ext>` under `attachments/` (normal mode) or `_staging/attachments/` (staged mode). Embed it explicitly as `![[attachments/<slug>-figure-N-<hash8>.<ext>]]` plus an italic caption.
    - **Also embed a key results / motivating figure** when the paper has one — a scaling plot, a benchmark chart, or a capability collage — in the Results section alongside the table.
    - **Mermaid is the dependency-free fallback.** If PyMuPDF/poppler isn't available or a figure can't be extracted, draw the architecture as a Mermaid diagram instead — Obsidian renders Mermaid fenced code blocks natively with no dependencies. `![[<source>.pdf#page=N]]` (the whole source page) is another no-extract option.
 3. **Keep the math as math.** Set the 1–3 core equations as `$$…$$` display LaTeX, not backtick code.
@@ -373,6 +384,7 @@ For each page in your plan:
 **If `WIKI_STAGED_WRITES=true`, apply the staging rules below before writing anything:**
 
 - **New pages** go to `_staging/<category>/page.md` instead of `<category>/page.md`. The page content is identical to what it would be in the live wiki — only the location differs.
+- If the ingest claimed an asset batch, add `asset_batch_id: <batch-id>` to every associated staged page or patch frontmatter. Put derived attachment copies in `_staging/attachments/`, but write final `![[attachments/...]]` embeds in the staged content. Keep `_raw/assets/` intact and set the batch to `awaiting_review`; `/wiki-stage-commit` is the only workflow that may publish these copies or archive the batch originals.
 - **Updates to existing pages** go to `_staging/<category>/page.patch.md`. The patch file format:
   ```markdown
   ---
@@ -465,6 +477,7 @@ After writing pages, check that wikilinks work in both directions. If page A lin
   "size_bytes": FILE_SIZE,
   "modified_at": FILE_MTIME,
   "content_hash": "sha256:<64-char-hex>",
+  "asset_batch_id": "<batch-id-or-null>",
   "source_type": "document",  // or "image" for png/jpg/webp/gif and image-only PDFs; "data" for chat/log/CSV/JSON sources
   "project": "project-name-or-null",
   "pages_created": ["list/of/pages.md"],
@@ -472,6 +485,30 @@ After writing pages, check that wikilinks work in both directions. If page A lin
 }
 ```
 `content_hash` is the SHA-256 of the file contents at ingest time. Always write it — it's the primary skip signal on subsequent runs.
+
+When `_raw/assets/` participates, also create or update the top-level batch record:
+```json
+{
+  "asset_batches": {
+    "<batch-id>": {
+      "status": "processing|awaiting_review|needs_rework|archived",
+      "sources": ["<canonical-source-key>"],
+      "assets": [
+        {
+          "raw_path": "_raw/assets/<relative-path>",
+          "content_hash": "sha256:<64-char-hex>",
+          "purpose": "figure-1",
+          "pages": ["references/example.md"],
+          "staged_path": null,
+          "published_path": "attachments/<source-slug>-figure-1-<hash8>.<ext>",
+          "archived_path": "_raw/_archived/assets/<relative-path>"
+        }
+      ]
+    }
+  }
+}
+```
+Use null for transitions that have not occurred. Never mark the batch `archived` until every listed raw path has been archived and no associated page remains pending or rejected.
 
 Also update `stats.total_sources_ingested` and `stats.total_pages`.
 

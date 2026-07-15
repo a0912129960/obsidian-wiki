@@ -296,7 +296,7 @@ Modes: `by-tag` (default — top 10 tags), `by-category` (the seven vault folder
 
 - **QMD semantic search (optional).** [QMD](https://github.com/tobi/qmd) indexes your wiki and source documents for semantic search. When `QMD_WIKI_COLLECTION` is set in `.env`, `wiki-query` runs a lex+vec pass against the collection before falling back to Grep — enabling concept-level matches that exact-string search misses. When `QMD_PAPERS_COLLECTION` is set, `wiki-ingest` queries your indexed sources before writing a new page, surfacing related work, detecting contradictions, and deciding whether to create or merge. QMD can be used through MCP or the local CLI. Without QMD, both skills fall back to Grep/Glob and remain fully functional.
 
-- **`_raw/` staging directory.** Drop rough notes, clipboard pastes, or quick captures into `_raw/` inside your vault. After successful distillation and manifest updates, `wiki-ingest` moves sources into `_raw/_archived/`. Captured files stage in `_raw/assets/`; only referenced knowledge-bearing files are published to `attachments/`, while all originals move to `_raw/_archived/assets/` after the full run succeeds. Configured via `OBSIDIAN_RAW_DIR` in `.env` (defaults to `_raw`).
+- **`_raw/` staging directory.** Drop rough notes, clipboard pastes, or quick captures into `_raw/` inside your vault. After successful distillation and manifest updates, `wiki-ingest` moves sources into `_raw/_archived/`. Captured files stage in `_raw/assets/`; one ingest invocation claims the whole flat pool in the manifest, publishes only referenced knowledge-bearing files to `attachments/`, and moves all originals to `_raw/_archived/assets/` only after the batch succeeds. Configured via `OBSIDIAN_RAW_DIR` in `.env` (defaults to `_raw`).
 
 ## Optional: QMD Semantic Search
 
@@ -331,9 +331,9 @@ Both skills degrade gracefully: if `QMD_WIKI_COLLECTION` / `QMD_PAPERS_COLLECTIO
 
 `_raw/` is a staging area inside your vault for unprocessed captures — rough notes, clipboard pastes, quick voice-memo transcripts. Drop files there and the next `wiki-ingest` run will promote them to proper wiki pages. After a source is successfully distilled and recorded in the manifest, it moves to `_raw/_archived/` instead of being deleted.
 
-`_raw/assets/` is a shared staging pool for captured or downloaded files; raw mode never ingests those files independently. Formal pages only embed files under the vault-root `attachments/` directory. During distillation, `wiki-ingest` publishes only referenced diagrams, charts, screenshots, figures, and documents, using names that combine the source slug, semantic purpose, and a short SHA-256 hash. Decorative, runtime, tracking, and unused web files remain archive-only.
+`_raw/assets/` is a shared flat staging pool for captured or downloaded files; raw mode never ingests those files independently. Before processing, one ingest invocation claims the entire pool in `.manifest.json` and records each raw, staged, published, and archived path with its SHA-256. A non-terminal batch must be resumed or resolved before files are added for another run. Formal pages only embed files under the vault-root `attachments/` directory. During distillation, `wiki-ingest` publishes only referenced diagrams, charts, screenshots, figures, and documents, named `<source-slug>-<purpose>-<hash8>.<ext>`. Decorative, runtime, tracking, and unused web files remain archive-only.
 
-After every eligible source in the run succeeds, all originals in `_raw/assets/` move to `_raw/_archived/assets/` and the staging directory is left empty. A partial failure leaves `_raw/assets/` unchanged. `_raw/_archived/` is excluded from future ingest runs, and a top-level source directory is archived only when every eligible source inside it succeeds.
+After every eligible source in the batch succeeds, all originals in `_raw/assets/` move to `_raw/_archived/assets/` and the staging directory is left empty. A partial failure leaves `_raw/assets/` unchanged. With `WIKI_STAGED_WRITES=true`, derived copies wait in `_staging/attachments/`; `/wiki-stage-commit` publishes them and archives the raw batch only after all associated pages are accepted. Rejected or skipped pages keep the originals available. `_raw/_archived/` is excluded from future ingest runs, and a top-level source directory is archived only when every eligible source inside it succeeds.
 
 The fastest way to feed `_raw/` during a live coding session is `/wiki-capture --quick` — it scans the current conversation, extracts bugs and gotchas, and writes structured draft files in under 60 seconds with no subagents or manifest writes.
 
@@ -362,7 +362,7 @@ After capturing pages into `_raw/`, ask your agent to process them:
 /wiki-ingest promote my raw pages
 ```
 
-`wiki-ingest` will read each eligible `_raw/` capture, distill it into the right wiki pages, publish referenced knowledge-bearing files to `attachments/`, and update the manifest/index/log. Successful sources move into `_raw/_archived/`; after the full run succeeds, original assets move into `_raw/_archived/assets/` and `_raw/assets/` is cleared for the next capture.
+`wiki-ingest` will read each eligible `_raw/` capture, distill it into the right wiki pages, publish referenced knowledge-bearing files to `attachments/`, and update the manifest/index/log. Successful sources move into `_raw/_archived/`; after the whole manifest-owned asset batch succeeds, original assets move into `_raw/_archived/assets/` and `_raw/assets/` is cleared for the next capture. In staged-write mode, publication and archival wait for `/wiki-stage-commit` approval.
 
 ---
 

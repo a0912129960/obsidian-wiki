@@ -159,6 +159,32 @@ class TestUpdateSource:
         assert str(src_file) in sources
         assert str(src_dir) in sources
 
+    def test_preserves_asset_batch_metadata(self, vault, src_file):
+        batch_id = "assets-20260715-001"
+        manifest = {
+            "version": 1,
+            "sources": {
+                str(src_file): {
+                    "content_hash": "old",
+                    "asset_batch_id": batch_id,
+                }
+            },
+            "asset_batches": {
+                batch_id: {
+                    "status": "awaiting_review",
+                    "sources": [str(src_file)],
+                    "assets": [],
+                }
+            },
+        }
+        _manifest_path(vault).write_text(json.dumps(manifest), encoding="utf-8")
+
+        update_source(vault, src_file, pages_produced=["references/example.md"])
+
+        saved = json.loads(_manifest_path(vault).read_text(encoding="utf-8"))
+        assert saved["sources"][str(src_file)]["asset_batch_id"] == batch_id
+        assert saved["asset_batches"] == manifest["asset_batches"]
+
 
 # ---------------------------------------------------------------------------
 # CLI

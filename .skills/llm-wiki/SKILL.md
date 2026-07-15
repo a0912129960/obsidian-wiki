@@ -157,6 +157,10 @@ The manifest enables:
 
 **Recording provenance.** When you write a manifest entry, populate `pages_created` and `pages_updated` with the vault-relative page paths that source contributed to. This is what makes re-ingestion (when a source changes) able to find the pages to revisit, instead of guessing.
 
+**Attachment batch provenance.** `_raw/assets/` is one flat staging pool, so an ingest invocation that consumes assets MUST claim the entire pool as one top-level `asset_batches` entry before processing begins. Give every participating source entry the same `asset_batch_id`. Do not start another asset-consuming ingest or add files to the pool while a non-terminal batch exists; resume or resolve that batch first.
+
+Each batch records `status` (`processing`, `awaiting_review`, `needs_rework`, or `archived`), its canonical source keys, and one record per asset with `raw_path`, full `content_hash`, semantic `purpose`, consuming `pages`, and nullable `staged_path`, `published_path`, and `archived_path`. These mappings are the authoritative proof that a published attachment came from a specific staged original. A batch becomes `archived` only after all associated pages succeed—or, in staged-write mode, after all are accepted—and every raw asset has been moved by exact path to `_raw/_archived/assets/`.
+
 ## Page Template
 
 When creating a new wiki page, use this structure:
@@ -232,7 +236,7 @@ Prose walkthrough. Embed the paper's real architecture figure as the primary
 visual (see *Academic papers* in `wiki-ingest` for the PyMuPDF extraction recipe).
 Fall back to a Mermaid flowchart only when no figure can be extracted.
 
-![[attachments/<slug>-fig1.png]]
+![[attachments/<slug>-architecture-<hash8>.<ext>]]
 *Figure N (Author Year): one-line caption.*
 
 ## Key Equations
@@ -252,7 +256,7 @@ when the paper has one:
 | Baseline | … | … | … |
 | **This paper** | … | … | … |
 
-![[attachments/<slug>-resultsN.png]]
+![[attachments/<slug>-results-chart-<hash8>.<ext>]]
 *Figure N (Author Year): one-line caption.*
 
 ## Limitations

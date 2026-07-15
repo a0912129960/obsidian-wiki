@@ -33,7 +33,7 @@ After captures land in `_raw/`, run the ingest skill from your AI agent:
 /wiki-ingest promote my raw pages
 ```
 
-The ingest skill will distill the raw captures into proper wiki pages, update the vault bookkeeping files, and delete promoted `_raw/` files so they are not processed twice.
+The ingest skill will distill the raw captures into proper wiki pages, update the vault bookkeeping files, and move successfully promoted `_raw/` sources into `_raw/_archived/` so the originals are retained without being processed twice. Companion files in `_raw/assets/` follow the batch attachment lifecycle and archive to `_raw/_archived/assets/` only after the whole batch succeeds.
 
 ## What Gets Captured
 

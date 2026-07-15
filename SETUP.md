@@ -121,13 +121,22 @@ $OBSIDIAN_VAULT_PATH/
 │   │   └── skills/
 │   └── another-project/
 │       └── ...
+├── attachments/        # Published files referenced by formal wiki pages
+├── _raw/               # Unprocessed source staging
+│   ├── assets/         # Flat asset pool claimed as one batch per ingest invocation
+│   └── _archived/
+│       └── assets/     # Original asset backups after full batch success
+├── _staging/
+│   └── attachments/    # Derived attachment copies awaiting review
 ├── _archives/          # Wiki snapshots for rebuild/restore
 ├── index.md            # Auto-maintained catalog
 ├── log.md              # Chronological operation log
-└── .manifest.json      # Ingest tracking ledger
+└── .manifest.json      # Source ledger and asset-batch path mappings
 ```
 
 Knowledge that's project-specific goes under `projects/<name>/`. Knowledge that's general goes in the global category directories. Both are cross-referenced with `[[wikilinks]]`.
+
+Formal pages reference only `attachments/...`. `_raw/assets/` remains a flat staging pool: one ingest invocation claims its entire contents in `.manifest.json`, selected files use `<source-slug>-<purpose>-<hash8>.<ext>`, and originals move to `_raw/_archived/assets/` only after the whole batch succeeds. With staged writes, derived copies wait in `_staging/attachments/`; rejection or skipping preserves the raw batch.
 
 ## Optional Config
 

@@ -16,7 +16,7 @@ You are reviewing LLM-written pages that are waiting in `_staging/` for human ap
 
 1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md`. This gives `OBSIDIAN_VAULT_PATH` and `WIKI_STAGED_WRITES`.
 2. If `WIKI_STAGED_WRITES` is not set or is `false`, tell the user: "Staged writes mode is not enabled. Set `WIKI_STAGED_WRITES=true` in your `.env` to use this feature." Then stop.
-3. Read the `_staging/` directory inventory.
+3. Read `.manifest.json`, including top-level `asset_batches`, then read the `_staging/` directory inventory. A page or patch with `asset_batch_id` participates in that batch's attachment lifecycle.
 
 ## Invocation Forms
 
@@ -29,11 +29,11 @@ You are reviewing LLM-written pages that are waiting in `_staging/` for human ap
 
 ## Step 1: Inventory Staged Files
 
-Glob `$OBSIDIAN_VAULT_PATH/_staging/**/*.md` — these are the pending pages.
+Glob `$OBSIDIAN_VAULT_PATH/_staging/**/*.md` — these are the pending pages. Do not treat binary files in `_staging/attachments/` as pages.
 
 Also glob `$OBSIDIAN_VAULT_PATH/_staging/**/*.patch.md` — these are pending *updates* to existing pages (diff-style files showing proposed additions and deletions).
 
-Report the inventory:
+For every page or patch, read `asset_batch_id` and use the manifest mapping to count its associated staged attachments. Verify each `_staging/attachments/...` file still matches the recorded full SHA-256 before offering acceptance. Report the inventory:
 
 ```
 Staged files: 4 new pages, 2 updates
@@ -42,7 +42,7 @@ New pages:
   _staging/concepts/attention-mechanism.md        (ingested 2 days ago)
   _staging/entities/andrej-karpathy.md            (ingested 2 days ago)
   _staging/skills/fine-tuning-llms.md             (ingested yesterday)
-  _staging/references/attention-is-all-you-need.md (ingested 3 hours ago)
+  _staging/references/attention-is-all-you-need.md (ingested 3 hours ago; 2 attachments)
 
 Updates (patch files):
   _staging/concepts/transformer-architecture.patch.md  (target: concepts/transformer-architecture.md)
@@ -102,17 +102,19 @@ If `--list` flag is set, stop after printing the inventory (Step 1).
 
 ### Accepting a new page
 
-1. Move `_staging/<category>/page.md` → `<category>/page.md` (the final location)
-2. Update `index.md` with the new page entry
-3. Remove the staged file
+1. If the page has an `asset_batch_id`, publish each mapped attachment it consumes from `_staging/attachments/<name>` to `attachments/<name>` first. Reuse an existing destination only when its full SHA-256 matches; never overwrite different bytes. Update `published_path` in the manifest mapping.
+2. Move `_staging/<category>/page.md` → `<category>/page.md` (the final location).
+3. Update `index.md` with the new page entry.
+4. Remove the staged file. Remove a staged attachment copy only when every accepted consumer has a hash-verified published copy and no pending or skipped consumer still needs the staged copy.
 
 ### Accepting a patch/update
 
-1. Read the current page at the target path
-2. Apply the proposed additions and deletions (merge, don't just overwrite)
-3. Update the `updated` frontmatter timestamp
-4. Update `index.md` if the summary changed
-5. Remove the staged patch file
+1. Read the current page at the target path.
+2. If the patch has an `asset_batch_id`, publish and hash-verify its mapped attachments exactly as for a new page before applying the patch.
+3. Apply the proposed additions and deletions (merge, don't just overwrite).
+4. Update the `updated` frontmatter timestamp.
+5. Update `index.md` if the summary changed.
+6. Remove the staged patch file and any no-longer-consumed staged attachment copies.
 
 ### Rejecting a file
 
@@ -120,6 +122,12 @@ Move it to `$OBSIDIAN_VAULT_PATH/_raw/` for manual editing:
 - `_staging/concepts/page.md` → `_raw/rejected-concepts-page.md`
 - `_staging/concepts/page.patch.md` → `_raw/rejected-patch-concepts-page.md`
 - Prefix with `rejected-` so the user can identify it
+
+If the rejected file has an `asset_batch_id`, set that batch to `needs_rework` and keep every original in `_raw/assets/`. A derived `_staging/attachments/` copy may be removed only when no pending or skipped page consumes it, every accepted consumer has a hash-verified published copy, and the corresponding raw original exists with the recorded hash. Never delete or archive a raw original on rejection.
+
+### Skipping a file
+
+Leave the page or patch and its derived attachments in `_staging/`. Keep the batch `awaiting_review` and leave `_raw/assets/` unchanged.
 
 ### Conflict detection on patch accept
 
@@ -131,10 +139,15 @@ Before applying a patch, check whether the target page's `updated` frontmatter i
 
 After processing all staged files:
 
-1. **`hot.md`** — update the Recent Activity section: "Committed N staged pages; rejected M."
-2. **`log.md`** — append:
+1. Reconcile each affected asset batch:
+   - Only when **every associated page or patch is accepted**, verify every final embed resolves under `attachments/`, then move every recorded raw file by exact path to `_raw/_archived/assets/`, preserve its relative layout, record `archived_path`, and set the batch to `archived`. Never overwrite a collision; append a numeric suffix and record the actual path.
+   - If any file was rejected, keep the raw pool and set `needs_rework`.
+   - If any file was skipped or remains pending, keep the raw pool and set `awaiting_review`.
+   - Leave the empty `_raw/assets/` and `_staging/attachments/` directories in place after successful finalization.
+2. **`hot.md`** — update the Recent Activity section: "Committed N staged pages; rejected M."
+3. **`log.md`** — append attachment counts and affected batch IDs:
    ```
-   - [TIMESTAMP] STAGE_COMMIT accepted=N rejected=M skipped=K
+   - [TIMESTAMP] STAGE_COMMIT accepted=N rejected=M skipped=K attachments_published=P asset_batches="id,..."
    ```
 
 ## Step 5: Report
@@ -154,6 +167,7 @@ Stage commit complete.
   references/attention-is-all-you-need.md → still in _staging/
 
 Staging queue: K files remaining
+Attachments published: P; asset batches archived: B; batches awaiting review/rework: R
 ```
 
 ## Notes
@@ -162,3 +176,4 @@ Staging queue: K files remaining
 - Patch files use a human-readable diff format: lines starting with `+` are additions, lines starting with `-` are deletions
 - `index.md` and `log.md` are always updated immediately on ingest (they are low-risk tracking files) — only category pages go through staging
 - The `_staging/` directory is not tracked by Obsidian's graph view — pages only appear in the wiki after promotion
+- `_staging/attachments/` contains derived review copies, not source backups. `_raw/assets/` remains the recoverable source pool until its entire batch is accepted and archived.

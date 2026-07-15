@@ -49,7 +49,7 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
 ## Step 2: Create Vault Directory Structure
 
 ```bash
-mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,attachments,_archives,_raw/assets,_raw/_archived/assets,_staging,.obsidian}
+mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,attachments,_archives,_raw/assets,_raw/_archived/assets,_staging/attachments,.obsidian}
 ```
 
 - `.obsidian/` — Obsidian's own config. Creates vault recognition.
@@ -59,7 +59,7 @@ mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,j
 - `_raw/` — Staging area for unprocessed drafts. `wiki-ingest` moves each successfully processed source into `_raw/_archived/`; directories move only after every eligible source succeeds.
 - `_raw/assets/` — Shared staging pool for captured or downloaded source assets. Formal pages never link here.
 - `_raw/_archived/` — Successfully processed immutable sources. Its `assets/` child stores the original staged assets after a fully successful run; `wiki-ingest` never processes them again.
-- `_staging/` — Review queue for LLM-written pages when `WIKI_STAGED_WRITES=true`. Pages here are not visible in Obsidian's graph until promoted via `/wiki-stage-commit`.
+- `_staging/` — Review queue for LLM-written pages when `WIKI_STAGED_WRITES=true`. Its `attachments/` child holds derived attachment copies pending the same review. Pages here are not visible in Obsidian's graph until promoted via `/wiki-stage-commit`.
 
 ## Step 3: Create Special Files
 
@@ -130,6 +130,25 @@ updated: TIMESTAMP
 *None yet.*
 ```
 
+### .manifest.json
+
+Initialize the delta and attachment-provenance registry:
+
+```json
+{
+  "version": 1,
+  "sources": {},
+  "projects": {},
+  "asset_batches": {},
+  "stats": {
+    "total_sources_ingested": 0,
+    "total_pages": 0
+  }
+}
+```
+
+`asset_batches` stays empty until an ingest claims the flat `_raw/assets/` pool. Do not remove this top-level key when updating source entries.
+
 ## Step 4: Create .obsidian Configuration
 
 Create minimal Obsidian config for a good out-of-box experience:
@@ -164,13 +183,13 @@ Tell the user about these recommended community plugins (they install manually):
 ## Step 6: Verify Setup
 
 Run a quick sanity check:
-- [ ] Vault directory exists with: `concepts/`, `entities/`, `skills/`, `references/`, `synthesis/`, `journal/`, `projects/`, `attachments/`, `_archives/`, `_raw/assets/`, `_raw/_archived/assets/`
+- [ ] Vault directory exists with: `concepts/`, `entities/`, `skills/`, `references/`, `synthesis/`, `journal/`, `projects/`, `attachments/`, `_archives/`, `_raw/assets/`, `_raw/_archived/assets/`, `_staging/attachments/`
 - [ ] `index.md` exists at vault root
 - [ ] `log.md` exists at vault root
 - [ ] `hot.md` exists at vault root
 - [ ] `.env` has `OBSIDIAN_VAULT_PATH` set
 - [ ] `.obsidian/` directory exists
-- [ ] `_staging/` directory exists (required even when `WIKI_STAGED_WRITES` is not set — created on setup for future use)
+- [ ] `_staging/attachments/` exists (required even when `WIKI_STAGED_WRITES` is not set — created on setup for future use)
 - [ ] Source directories (if configured) exist and are readable
 
 Report the results and tell the user they can now:

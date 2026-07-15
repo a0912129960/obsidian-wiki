@@ -29,12 +29,18 @@ $OBSIDIAN_VAULT_PATH/
 ├── index.md                # Master index — every page listed, always kept current
 ├── log.md                  # Chronological activity log (ingests, updates, lints)
 ├── hot.md                  # Session hot cache — ~500-word semantic snapshot of recent activity
-├── .manifest.json          # Tracks every ingested source: path, timestamps, pages produced
+├── .manifest.json          # Tracks sources, pages, and raw→published→archived asset batches
 ├── _meta/
 │   ├── taxonomy.md         # Controlled tag vocabulary
 │   └── *.base              # Obsidian Bases dashboard definitions (wiki-dashboard skill)
 ├── _insights.md            # Graph analysis output (hubs, bridges, dead ends)
+├── attachments/            # Published files referenced by formal knowledge pages
 ├── _raw/                   # Staging area — drop rough notes here, next ingest promotes them
+│   ├── assets/             # Flat staging pool claimed as one batch per ingest invocation
+│   └── _archived/
+│       └── assets/         # Original asset backups after the whole batch succeeds
+├── _staging/
+│   └── attachments/        # Derived copies awaiting staged-write approval
 ├── _readouts/              # Derived narrative readouts saved by wiki-narrate — not knowledge pages
 ├── concepts/               # Abstract ideas, patterns, mental models
 ├── entities/               # Concrete things — people, tools, libraries, companies
@@ -45,6 +51,8 @@ $OBSIDIAN_VAULT_PATH/
 └── projects/
     └── <project-name>.md   # One page per project synced via wiki-update
 ```
+
+Formal pages reference only `attachments/`. `_raw/assets/` is a flat, manifest-owned staging batch; successful originals archive to `_raw/_archived/assets/`. With staged writes, derived copies wait in `_staging/attachments/` and raw originals remain until every associated page is accepted.
 
 Every wiki page has required frontmatter: `title`, `category`, `tags`, `sources`, `created`, `updated`. Pages connect via internal links — `[[wikilinks]]` by default, or standard Markdown links when `OBSIDIAN_LINK_FORMAT=markdown` is set in config.
 

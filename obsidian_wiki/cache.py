@@ -10,8 +10,12 @@ Manifest format (.manifest.json in the vault root):
     "<abs-or-rel-path>": {
       "content_hash": "<sha256-hex>",
       "last_ingested": "<ISO-8601>",
-      "pages_produced": ["<vault-relative-page-path>", ...]
+      "pages_produced": ["<vault-relative-page-path>", ...],
+      "asset_batch_id": "<batch-id>"
     }
+  },
+  "asset_batches": {
+    "<batch-id>": {"status": "processing", "sources": [], "assets": []}
   }
 }
 """
@@ -30,6 +34,7 @@ class SourceEntry(TypedDict, total=False):
     content_hash: str
     last_ingested: str
     pages_produced: list[str]
+    asset_batch_id: str | None
 
 
 class CheckResult(TypedDict):
