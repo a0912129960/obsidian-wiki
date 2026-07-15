@@ -27,7 +27,8 @@ ALLOWED_RELATIONSHIP_TYPES = frozenset(
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 _FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):", re.MULTILINE)
-_WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
+_WIKILINK_RE = re.compile(r"(?<!!)\[\[([^\]]+?)\]\]")
+_EMBED_RE = re.compile(r"!\[\[([^\]]+?)\]\]")
 _MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
 _RELATIONSHIP_LIST_FIELD_RE = re.compile(
     r"^\s*-\s*(type|target):\s*(.*?)\s*$"
@@ -45,6 +46,35 @@ def _iter_pages(vault: Path) -> list[Path]:
         path for path in vault.rglob("*.md")
         if not any(part in SKIP_DIRS for part in path.relative_to(vault).parts)
     ]
+
+
+def _iter_attachments(vault: Path) -> list[Path]:
+    attachments_dir = vault / "attachments"
+    if not attachments_dir.is_dir():
+        return []
+    return [
+        path
+        for path in attachments_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() != ".md"
+    ]
+
+
+def _wikilink_target(raw: str) -> str:
+    return raw.split("|", 1)[0].split("#", 1)[0].strip()
+
+
+def _page_link_slug(raw: str) -> str:
+    target = _wikilink_target(raw).replace("\\", "/")
+    name = target.rsplit("/", 1)[-1]
+    if name.lower().endswith(".md"):
+        name = name[:-3]
+    return _slug(name)
+
+
+def _is_attachment_embed(raw: str) -> bool:
+    target = _wikilink_target(raw).replace("\\", "/")
+    suffix = Path(target.rsplit("/", 1)[-1]).suffix.lower()
+    return bool(suffix) and suffix != ".md"
 
 
 def _parse_frontmatter_values(frontmatter: str) -> dict[str, str]:
@@ -148,9 +178,19 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
 
     links: list[str] = []
     for raw in _WIKILINK_RE.findall(text):
-        target = _slug(raw.split("/")[-1])
+        target = _page_link_slug(raw)
         if target:
             links.append(target)
+    embeds: list[str] = []
+    for raw in _EMBED_RE.findall(text):
+        if _is_attachment_embed(raw):
+            target = _wikilink_target(raw)
+            if target:
+                embeds.append(target)
+        else:
+            target = _page_link_slug(raw)
+            if target:
+                links.append(target)
     for href in _MD_LINK_RE.findall(text):
         target = _slug(Path(href).stem)
         if target:
@@ -164,12 +204,18 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "summary": values.get("summary", "").strip(),
         "fields": fields,
         "links": links,
+        "embeds": embeds,
         "relationships": _parse_relationships(frontmatter),
     }
 
 
 def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, Any]:
     pages = [_parse_page(path, vault) for path in _iter_pages(vault)]
+    attachments = [path.relative_to(vault).as_posix() for path in _iter_attachments(vault)]
+    attachment_path_index = {path.lower(): path for path in attachments}
+    attachment_name_index: dict[str, list[str]] = defaultdict(list)
+    for path in attachments:
+        attachment_name_index[Path(path).name.lower()].append(path)
     slug_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     node_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for page in pages:
@@ -187,6 +233,23 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
                 broken_links.append({"page": page["path"], "target": target})
                 continue
             incoming[target] += 1
+
+    broken_embeds: list[dict[str, str]] = []
+    ambiguous_embeds: list[dict[str, Any]] = []
+    for page in pages:
+        for target in page["embeds"]:
+            normalized = target.replace("\\", "/").strip("/")
+            if "/" in normalized:
+                if normalized.lower() not in attachment_path_index:
+                    broken_embeds.append({"page": page["path"], "target": target})
+                continue
+            matches = attachment_name_index.get(normalized.lower(), [])
+            if not matches:
+                broken_embeds.append({"page": page["path"], "target": target})
+            elif len(matches) > 1:
+                ambiguous_embeds.append(
+                    {"page": page["path"], "target": target, "matches": sorted(matches)}
+                )
 
     missing_frontmatter = []
     for page in pages:
@@ -286,6 +349,8 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
 
     findings = {
         "broken_links": broken_links,
+        "broken_embeds": broken_embeds,
+        "ambiguous_embeds": ambiguous_embeds,
         "missing_frontmatter": missing_frontmatter,
         "duplicate_titles": duplicate_titles,
         "missing_summaries": sorted(missing_summaries),
@@ -300,6 +365,8 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
 
     if (
         counts["broken_links"]
+        or counts["broken_embeds"]
+        or counts["ambiguous_embeds"]
         or counts["missing_frontmatter"]
         or counts["confidence_mismatches"]
         or counts["confidence_ledger_errors"]
@@ -324,7 +391,9 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
         "status": status,
         "stats": {
             "pages": len(pages),
+            "attachments": len(attachments),
             "link_count": sum(len(page["links"]) for page in pages),
+            "embed_count": sum(len(page["embeds"]) for page in pages),
             "findings": counts,
             "trust": trust_report["counts"] if trust_report else {"ledger": "not_configured"},
         },

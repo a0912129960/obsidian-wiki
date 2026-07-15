@@ -48,6 +48,8 @@ Use `WebFetch` to retrieve the content at the provided URL (or skip if `defuddle
 - If the page is paywalled, JS-rendered (blank body), or returns an error: create a **stub page** with the title (inferred from the URL), the URL, and `stub: true` in frontmatter. Append this to the body: `> [Stub] Page could not be fetched — enrich manually.` Then skip to Step U7.
 - If the page fetches successfully: proceed to Step U2.
 
+When the fetch downloads companion files, stage them in `$OBSIDIAN_VAULT_PATH/_raw/assets/`. Do not embed that path in the formal page. Follow **Publish and archive raw assets** in the main `wiki-ingest/SKILL.md`: publish only knowledge-bearing files actually used by the final page, name them with the page slug, semantic purpose, and short content hash, and embed the resulting `attachments/` path. Keep decorative, runtime, tracking, and unused web assets out of `attachments/`.
+
 ## Step U2: Check for Duplicate
 
 Before creating a new page, check whether this URL was already ingested:
@@ -276,6 +278,8 @@ Misc mode:
 
 **`hot.md`** — Update **Recent Activity** with what was just ingested — keep the last 3 operations. Update **Key Takeaways** if the page introduced a concept worth flagging. Update `updated` timestamp.
 
+**Raw asset finalization** — after the page, published attachment copies, manifest, index, and log all succeed, archive the original downloaded files from `_raw/assets/` into `_raw/_archived/assets/` by exact path, following the collision and success-boundary rules in the main skill. Keep `_raw/assets/` unchanged if this URL ingest fails or if it is part of a raw-mode run with another eligible source that failed.
+
 ## Quality Checklist (URL sources)
 
 - [ ] Target path determined correctly based on project detection
@@ -288,4 +292,6 @@ Misc mode:
 - [ ] In misc mode: `affinity` and `promotion_status` fields present
 - [ ] `.manifest.json`, `index.md`, and `log.md` updated
 - [ ] Stub pages reported to user if fetch failed
+- [ ] Formal embeds point only to `attachments/`; no page links to `_raw/assets/` or `_raw/_archived/`
+- [ ] Only referenced knowledge-bearing assets were published; all downloaded originals were archived after full success
 - [ ] QMD refresh per the main SKILL.md (skip if `QMD_WIKI_COLLECTION` unset)

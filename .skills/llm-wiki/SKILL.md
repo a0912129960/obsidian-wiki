@@ -33,6 +33,8 @@ A collection of interconnected Obsidian-compatible markdown files organized by c
 
 The wiki lives at the path configured via `OBSIDIAN_VAULT_PATH` in `.env`.
 
+Permanent files embedded by compiled wiki pages live in the vault-root `attachments/` directory. Always use an explicit vault-relative embed such as `![[attachments/<name>.<ext>]]`. The in-vault `_raw/assets/` directory is only a staging pool for downloaded or captured source assets; formal pages never link to it.
+
 ### Layer 3: The Schema (this skill + config)
 
 The rules governing how the wiki is structured — categories, conventions, page templates, and operational workflows. The schema tells the LLM *how* to maintain the wiki.

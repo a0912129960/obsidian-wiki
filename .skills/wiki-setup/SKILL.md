@@ -49,13 +49,16 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
 ## Step 2: Create Vault Directory Structure
 
 ```bash
-mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,_archives,_raw,_staging,.obsidian}
+mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,attachments,_archives,_raw/assets,_raw/_archived/assets,_staging,.obsidian}
 ```
 
 - `.obsidian/` — Obsidian's own config. Creates vault recognition.
 - `projects/` — Per-project knowledge (populated during ingest).
+- `attachments/` — Published images, PDFs, and other files embedded by formal wiki pages.
 - `_archives/` — Stores wiki snapshots for rebuild/restore operations.
-- `_raw/` — Staging area for unprocessed drafts. Drop rough notes here; `wiki-ingest` will promote them to proper wiki pages and move the originals into `_raw/_archived/` (created on first use).
+- `_raw/` — Staging area for unprocessed drafts. `wiki-ingest` moves each successfully processed source into `_raw/_archived/`; directories move only after every eligible source succeeds.
+- `_raw/assets/` — Shared staging pool for captured or downloaded source assets. Formal pages never link here.
+- `_raw/_archived/` — Successfully processed immutable sources. Its `assets/` child stores the original staged assets after a fully successful run; `wiki-ingest` never processes them again.
 - `_staging/` — Review queue for LLM-written pages when `WIKI_STAGED_WRITES=true`. Pages here are not visible in Obsidian's graph until promoted via `/wiki-stage-commit`.
 
 ## Step 3: Create Special Files
@@ -137,7 +140,8 @@ Create minimal Obsidian config for a good out-of-box experience:
   "strictLineBreaks": false,
   "showFrontmatter": false,
   "defaultViewMode": "preview",
-  "livePreview": true
+  "livePreview": true,
+  "attachmentFolderPath": "attachments"
 }
 ```
 
@@ -160,7 +164,7 @@ Tell the user about these recommended community plugins (they install manually):
 ## Step 6: Verify Setup
 
 Run a quick sanity check:
-- [ ] Vault directory exists with: `concepts/`, `entities/`, `skills/`, `references/`, `synthesis/`, `journal/`, `projects/`, `_archives/`, `_raw/`
+- [ ] Vault directory exists with: `concepts/`, `entities/`, `skills/`, `references/`, `synthesis/`, `journal/`, `projects/`, `attachments/`, `_archives/`, `_raw/assets/`, `_raw/_archived/assets/`
 - [ ] `index.md` exists at vault root
 - [ ] `log.md` exists at vault root
 - [ ] `hot.md` exists at vault root

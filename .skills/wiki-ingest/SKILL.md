@@ -7,7 +7,7 @@ description: >
   journal entries, browser bookmarks, email archives, text dumps), AND web URLs. Use whenever the
   user wants to add new sources to their wiki: "add this to the wiki", "process these docs", "ingest
   this folder", "ingest this data", "process this export/logs", "import my chat history from X",
-  "/ingest-url <url>", "add this URL", "save this page", or pastes a URL and says "add this" /
+  "/ingest-url {url}", "add this URL", "save this page", or pastes a URL and says "add this" /
   "save this to my wiki". Also triggers when the user drops a file, or for raw mode: "process my
   drafts", "promote my raw pages", or any reference to the _raw/ staging directory. This is the
   general catch-all ingest skill for any document, text, or URL source not covered by a more
@@ -79,9 +79,42 @@ Process draft pages from the `_raw/` staging directory inside the vault. Use whe
 - The user says "process my drafts", "promote my raw pages", or drops files into `_raw/`
 - After a paste-heavy session where notes were captured quickly without structure
 
-In raw mode, each file in `OBSIDIAN_VAULT_PATH/_raw/` (or `OBSIDIAN_RAW_DIR`) is treated as a source. After promoting a file to a proper wiki page, **move the original into `_raw/_archived/`** (same filename, creating the directory if it doesn't exist) instead of deleting it. Never leave promoted files at the top level of `_raw/` — they'll be double-processed on the next run; moving them into `_raw/_archived/` keeps them out of that scan while preserving the original draft.
+Treat `_raw/` as a staging directory with these reserved children:
 
-This keeps faith with the "immutable raw layer" principle in `llm-wiki/SKILL.md`: even though `_raw/` drafts aren't Layer 1 sources, some have no other copy (e.g. a quick-capture finding typed straight into `_raw/` with no external document behind it), so the promoted file is the only record once it leaves the staging directory.
+```text
+_raw/
+├── assets/       # Shared staging pool for captured/downloaded source assets
+├── _archived/
+│   └── assets/   # Original asset backups; never ingest again
+├── file.md       # Archive after successful distillation and manifest update
+└── folder/       # Archive only after every eligible source succeeds
+
+attachments/      # Published files used by formal wiki pages
+```
+
+Enumerate only the other top-level children as raw-mode candidates. Ignore `.gitkeep`, dotfiles, and framework control files. Never ingest `_raw/assets/**` independently; files there are companion inputs for the current raw ingest. Never reprocess `_raw/_archived/**`.
+
+For each eligible top-level file, finish distillation and its manifest update before moving that exact file into `_raw/_archived/`. A top-level directory may be processed recursively, but move the whole directory only after every eligible source inside it succeeds and all manifest updates are complete. If any source fails, leave the original directory and all of its contents in place; do not archive a partial result.
+
+This preserves immutable source records without equating the `_raw/` staging directory itself with the architecture's Raw Sources layer. Some drafts have no external copy, so archiving the successfully promoted source retains the only original record.
+
+#### Publish and archive raw assets
+
+For each successfully distilled source, inspect its references to `_raw/assets/**` and classify the files before writing the formal page:
+
+- **Publish** only files that the final page actually embeds and that carry knowledge, such as diagrams, charts, screenshots, figures, or attached documents.
+- **Archive only** decorative or runtime web files such as favicons, tracking pixels, CSS, JavaScript, fonts, navigation graphics, and unused thumbnails. Do not copy them into `attachments/`.
+
+Copy each publishable file to the vault-root `attachments/` directory. Name it `<source-slug>-<purpose>-<hash8>.<ext>`, where `purpose` is a short semantic role such as `figure-1`, `architecture`, `results-chart`, or `document`, and `hash8` is the first eight lowercase hexadecimal characters of the file's SHA-256. Preserve the real extension. If the exact destination already exists with the same hash, reuse it; never overwrite different content. Rewrite the formal page to use an explicit vault-relative embed such as `![[attachments/<published-name>]]`. A formal page must never link to `_raw/assets/` or `_raw/_archived/`.
+
+After the page, published attachment copies, and manifest update have succeeded, the source may move to `_raw/_archived/` under the normal per-file/per-directory rules above. Finalize the shared asset pool only after **all eligible sources in the current raw-mode run succeed**:
+
+1. Verify every formal embed resolves to `attachments/` and every published copy has the same SHA-256 as its raw source.
+2. Move every file remaining under `_raw/assets/` by exact path into `_raw/_archived/assets/`, preserving its relative layout.
+3. Never use wildcards, recursive deletion, or overwrite. On an archive collision, append a numeric suffix before the extension.
+4. Leave the empty `_raw/assets/` directory in place for the next capture.
+
+If any eligible source fails, do not archive or clear `_raw/assets/`. Published copies already committed for successful sources may remain because their hash-based names make retries idempotent. If there are raw assets but no eligible source, leave them in place and report them as pending rather than archiving them without provenance.
 
 **Source inheritance:** The `_raw/` path is a staging artifact — never use it as the `sources:` value on the promoted page. Derive the source entry from the `_raw/` file's own frontmatter instead:
 
@@ -90,7 +123,7 @@ This keeps faith with the "immutable raw layer" principle in `llm-wiki/SKILL.md`
 - If the file has only `sources:`, copy those entries verbatim.
 - Only fall back to the `_raw/` filename if the file has no `sources:` or `capture_source` fields at all.
 
-**Move safety:** Only move the specific file that was just promoted. Before moving, verify the resolved path is inside `$OBSIDIAN_VAULT_PATH/_raw/` — never touch files outside this directory. Never use wildcards or recursive operations (`rm -rf`, `mv *`). Move one file at a time by its exact path into `_raw/_archived/`, preserving its filename. If a file of the same name already exists there, append a numeric suffix rather than overwriting.
+**Move safety:** Before moving, verify the resolved source is an eligible top-level child of `$OBSIDIAN_VAULT_PATH/_raw/` and the destination is inside `_raw/_archived/`. Use exact source and destination paths only. Never use wildcards, recursive deletion, or overwrite an existing archive. Preserve the original name; if it already exists, append a numeric suffix such as `file-2.md` or `folder-2`.
 
 ## The Ingest Process
 

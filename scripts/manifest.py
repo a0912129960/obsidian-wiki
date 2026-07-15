@@ -124,14 +124,18 @@ def _relative_key_index(sources: dict) -> dict[str, list[tuple[str, dict]]]:
     index: dict[str, list[tuple[str, dict]]] = {}
     for k, v in sources.items():
         if not os.path.isabs(k):
-            index.setdefault(os.path.basename(k), []).append((k, v))
+            basename = k.replace("\\", "/").rsplit("/", 1)[-1]
+            index.setdefault(basename, []).append((k, v))
     return index
 
 
 def _match_relative(path: str, index: dict[str, list[tuple[str, dict]]]) -> dict | None:
     """Return the manifest entry whose relative key is a suffix of `path`."""
-    for relkey, entry in index.get(os.path.basename(path), ()):
-        if path == relkey or path.endswith(os.sep + relkey):
+    normalized_path = path.replace("\\", "/")
+    basename = normalized_path.rsplit("/", 1)[-1]
+    for relkey, entry in index.get(basename, ()):
+        normalized_relkey = relkey.replace("\\", "/")
+        if normalized_path == normalized_relkey or normalized_path.endswith("/" + normalized_relkey):
             return entry
     return None
 

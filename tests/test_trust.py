@@ -8,8 +8,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki.trust import build_trust_ledger, check_trust_ledger, write_trust_ledger
+
+
+def _symlink_or_skip(
+    link: Path, target: Path, *, target_is_directory: bool = False
+) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except OSError as exc:
+        if os.name == "nt" and getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is unavailable")
+        raise
 
 
 def _page(
@@ -385,7 +398,7 @@ def test_trust_writer_rejects_symlinked_meta_directory(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     vault.mkdir()
     outside.mkdir()
-    (vault / "_meta").symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(vault / "_meta", outside, target_is_directory=True)
     ledger = {"schema_version": 1, "method": "manual-lineage-and-claim-coverage-v1", "pages": {}}
 
     try:
@@ -404,7 +417,7 @@ def test_trust_writer_never_follows_predictable_temp_symlink(tmp_path: Path) -> 
     meta.mkdir(parents=True)
     outside = tmp_path / "outside.txt"
     outside.write_text("sentinel\n")
-    (meta / "trust-ledger.json.tmp").symlink_to(outside)
+    _symlink_or_skip(meta / "trust-ledger.json.tmp", outside)
     ledger = {"schema_version": 1, "method": "manual-lineage-and-claim-coverage-v1", "pages": {}}
 
     write_trust_ledger(meta / "trust-ledger.json", ledger, vault=vault)
@@ -420,7 +433,7 @@ def test_trust_writer_rejects_symlinked_ledger_destination(tmp_path: Path) -> No
     outside = tmp_path / "outside.txt"
     outside.write_text("sentinel\n")
     destination = meta / "trust-ledger.json"
-    destination.symlink_to(outside)
+    _symlink_or_skip(destination, outside)
     ledger = {"schema_version": 1, "method": "manual-lineage-and-claim-coverage-v1", "pages": {}}
 
     try:

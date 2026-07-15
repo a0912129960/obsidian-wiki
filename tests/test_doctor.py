@@ -14,6 +14,7 @@ from obsidian_wiki.cli import list_skills
 def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
     return subprocess.run(
         [sys.executable, "-m", "obsidian_wiki.cli", *args],
         capture_output=True,

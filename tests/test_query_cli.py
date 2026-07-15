@@ -32,6 +32,7 @@ def _page(vault: Path, name: str, *, title: str, summary: str, links: list[str] 
 def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
     return subprocess.run(
         [sys.executable, "-m", "obsidian_wiki.cli", *args],
         capture_output=True,
