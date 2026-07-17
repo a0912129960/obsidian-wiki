@@ -1,0 +1,27 @@
+{
+  "skill_name": "project-rules-init",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Initialize rules for this established C# repository, but inspect its AGENTS.md and get my approval before changing anything.",
+      "expected_output": "A read-only research report and explicit approval gate; no repository changes before approval.",
+      "files": [],
+      "assertions": [
+        "The response reads the existing instruction hierarchy before proposing rules.",
+        "The response does not use rules init --apply before explicit approval.",
+        "The proposed checks use argv arrays rather than shell strings."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "This repo already has .ai-policy/project.json. Add one new review rule and refresh everything.",
+      "expected_output": "The skill treats this as a reviewed policy delta and routes materialization through sync rather than reinitializing.",
+      "files": [],
+      "assertions": [
+        "The response does not recreate the project-rules-init skill or re-run rules init.",
+        "The response requests approval for the policy input change.",
+        "The response uses ai-policy-sync or rules sync after approval."
+      ]
+    }
+  ]
+}

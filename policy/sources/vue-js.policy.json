@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "vue-js",
+  "rules": [
+    {
+      "id": "vue-js.incremental-legacy-verification",
+      "assurance": "guidance",
+      "severity": "warning",
+      "statement": "Prefer repository-native incremental lint and test commands in legacy Vue projects; do not require unrelated historical cleanup."
+    }
+  ]
+}

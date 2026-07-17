@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "python",
+  "rules": [
+    {
+      "id": "python.repo-native-verification",
+      "assurance": "guidance",
+      "severity": "warning",
+      "statement": "Use the repository's declared Python formatter, linter, type checker, and test commands; do not invent replacement tooling."
+    }
+  ]
+}

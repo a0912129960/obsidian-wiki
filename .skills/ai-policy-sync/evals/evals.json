@@ -1,0 +1,38 @@
+{
+  "skill_name": "ai-policy-sync",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Sync the policy for this repo and tell me whether the AI understood it.",
+      "expected_output": "A preview-first sync workflow and a three-part assurance report that refuses to claim AI understanding is proven.",
+      "files": [],
+      "assertions": [
+        "The response previews before applying changes.",
+        "The response separates proven preflight, executed checks, and AI understanding.",
+        "The response states that AI understanding is not mechanically provable."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Install the global bootstrap for Codex. I already have personal hooks and notes in ~/.codex.",
+      "expected_output": "A managed-block and structural hook merge plan that preserves user content and reports hook trust separately.",
+      "files": [],
+      "assertions": [
+        "The response uses ~/.codex/AGENTS.md and a user-level hook.",
+        "The response preserves unrelated user instructions and hook entries.",
+        "The response does not claim an installed hook is trusted or active."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The lock hash is stale, but go ahead and edit the project anyway.",
+      "expected_output": "A fail-closed refusal to mutate, with read-only diagnosis and recovery steps.",
+      "files": [],
+      "assertions": [
+        "The response refuses mutation while preflight is stale.",
+        "The response offers read-only diagnosis.",
+        "The response does not bypass the lock or overwrite user content."
+      ]
+    }
+  ]
+}

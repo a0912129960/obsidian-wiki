@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "id": "vue-js",
+  "extends": ["default"],
+  "sources": ["vue-js"]
+}

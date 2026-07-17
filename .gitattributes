@@ -1,0 +1,2 @@
+# Policy hashes are computed over repository bytes and must be checkout-stable.
+policy/** text eol=lf

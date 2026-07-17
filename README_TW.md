@@ -87,6 +87,24 @@ obsidian-wiki graph-analyse /path/to/vault --pretty
 
 使用 `doctor` 找出破損設定、過期安裝或格式錯誤的 vault 狀態。當你想快速取得本機答案、不想透過 agent prompt 時，可以使用 `query` 與 `lint`。較低階的 `graph-query`、`graph-analyse`、`batch-plan`、`cache-*`、`ast-extract` 仍可用於自動化與除錯。
 
+### Rules / Policy Governance
+
+LLM Wiki 內建版本化且以雜湊固定的 policy manifest，以及 deterministic resolver。Repository policy 初始化預設只預覽；套用時建立 `.ai-policy` artifacts，且在 `AGENTS.md` 內只更新 managed block。全域 bootstrap 安裝也會完整保留 managed block 以外的既有內容。
+
+```bash
+obsidian-wiki rules init --repo /path/to/repo --pretty
+obsidian-wiki rules init --repo /path/to/repo --config reviewed-policy.json --apply --pretty
+obsidian-wiki rules resolve --repo /path/to/repo --pretty
+obsidian-wiki rules sync --repo /path/to/repo --pretty
+obsidian-wiki rules check --repo /path/to/repo --preflight --pretty
+obsidian-wiki rules check --repo /path/to/repo --preflight --record --pretty
+obsidian-wiki rules check --repo /path/to/repo --execute --pretty
+obsidian-wiki rules install-bootstrap --agent codex --pretty
+obsidian-wiki rules install-bootstrap --agent codex --apply --pretty
+```
+
+`rules resolve` 永遠唯讀；`rules check` 也只有明確加上 `--record` 才會寫入 hook state。輸出會分開呈現 deterministic preflight 證據、以 argv 執行的規則檢查，以及永遠不能宣稱已被機械證明的 AI 理解。Policy input 缺少或過期時會 fail-closed。支援的 user-level bootstrap adapter 包括 Codex（`~/.codex/AGENTS.md` 與受管理的 `PreToolUse` hook）、Claude（`~/.claude/CLAUDE.md`）、Gemini（`~/.gemini/GEMINI.md`）及 Copilot（`~/.copilot/copilot-instructions.md`）。Codex 新安裝的 user hook 在使用者審閱並信任前會回報為 `installed-untrusted`。
+
 ### 多個 Vault
 
 你可以在 `~/.obsidian-wiki/config` 中保留一個預設 vault，也可以用 `/wiki-switch new work` 建立像 `~/.obsidian-wiki/config.work` 這樣的命名設定。從任何目錄都能用 `@name` 把單次請求導向命名 vault，例如 `@work update wiki` 或 `wiki-query @personal what do I know about MCP security`。`@name` override 只套用在該次請求，永遠不會改變預設 vault。
@@ -458,6 +476,8 @@ git remote add origin https://github.com/you/my-wiki.git
 | `daily-update` | Daily maintenance cycle：freshness、index、hot cache | `/daily-update` |
 | `impl-validator` | 根據 stated goal 驗證 implementation | `/impl-validator` |
 | `graph-colorize` | 依 tag/category/visibility 為 Obsidian graph 上色 | `/graph-colorize` |
+| `project-rules-init` | 研究並初始化經審核的 repository policy | `/project-rules-init` |
+| `ai-policy-sync` | 預覽、同步並驗證 policy artifacts | `/ai-policy-sync` |
 | `skill-creator` | 建立新的 skills | `/skill-creator` |
 
 > **Note:** Slash commands（`/skill-name`）可在 Claude Code、Cursor 與 Windsurf 使用。在其他 agents 中，只要描述你想做什麼，agent 會找到正確的 skill。

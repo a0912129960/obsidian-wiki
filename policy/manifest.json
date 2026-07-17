@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "canonical_json": "llm-wiki-canonical-json-v1",
+  "policy_set": "llm-wiki-default-v1",
+  "schemas": [
+    {"id": "manifest", "path": "schemas/manifest.schema.json", "sha256": "9a4512076ae399bfdd8bbf5dd67d8c3a9a5c9315e4df8a8e4a458306818417dc"},
+    {"id": "project", "path": "schemas/project.schema.json", "sha256": "b7e051d16bbd33fa5d2c408f746d5003f4cf3347ce51e3b1f9f90859669bda6f"}
+  ],
+  "sources": [
+    {"id": "csharp", "path": "sources/csharp.policy.json", "sha256": "c0ddf3060743cb9ef32dd53b40345df2db9a6c03c03df71d255ff56164ce3333"},
+    {"id": "global-governance", "path": "sources/global-governance.policy.json", "sha256": "3665ef2bcae8473c2f7732de31e197fea53565f7c324a126acea6e9c0a7cbb3a"},
+    {"id": "python", "path": "sources/python.policy.json", "sha256": "68f22ba245b2c3363e9309e4e0a5213d9f373ed14b0947db3e1112761de0c50e"},
+    {"id": "vue-js", "path": "sources/vue-js.policy.json", "sha256": "ed285c96291f135728c294531385b8d59ff0539d207a231068012aca01b41631"}
+  ],
+  "packs": [
+    {"id": "csharp", "path": "packs/csharp.json", "sha256": "b8a6b41c1005d912b1e8f1c734ae74472227dd462876144528ada014652058f4"},
+    {"id": "default", "path": "packs/default.json", "sha256": "f65659c6bf43e4d285737046c6cc6316f3f8146357cdf00a0bd3330de898e66a"},
+    {"id": "python", "path": "packs/python.json", "sha256": "7e746214d5e60eaaac56a257d2d38fac811afd6f578e9d20b420f6581b41539b"},
+    {"id": "vue-js", "path": "packs/vue-js.json", "sha256": "3a832c189a7a95ef63b88c228531f43e814e4051772c51a6b141207e1669821f"}
+  ],
+  "bootstraps": [
+    {"id": "global", "path": "bootstrap/global.md", "sha256": "0d4673df36f297c5548c516d512fd3bc48a1d0ba8aed106fe931f569c7f8576d"},
+    {"id": "repository", "path": "bootstrap/repository.md", "sha256": "171eea897a17a3d41a909c25dfe95e72222222c6b2971e21c241084b7c5aadb4"}
+  ],
+  "adapters": [
+    {"id": "claude", "bootstrap": "global", "managed_id": "llm-wiki-global-bootstrap", "default_path": ".claude/CLAUDE.md"},
+    {"id": "codex", "bootstrap": "global", "managed_id": "llm-wiki-global-bootstrap", "default_path": ".codex/AGENTS.md", "home_env": "CODEX_HOME", "hook": true},
+    {"id": "copilot", "bootstrap": "global", "managed_id": "llm-wiki-global-bootstrap", "default_path": ".copilot/copilot-instructions.md"},
+    {"id": "gemini", "bootstrap": "global", "managed_id": "llm-wiki-global-bootstrap", "default_path": ".gemini/GEMINI.md"}
+  ]
+}

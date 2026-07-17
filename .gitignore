@@ -1,4 +1,6 @@
 .env
+.claude/settings.local.json
+.codex/config.toml
 .DS_Store
 *.pyc
 __pycache__/

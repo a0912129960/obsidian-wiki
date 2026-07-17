@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "id": "csharp",
+  "extends": ["default"],
+  "sources": ["csharp"]
+}

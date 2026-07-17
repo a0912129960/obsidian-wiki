@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "csharp",
+  "rules": [
+    {
+      "id": "csharp.repo-native-verification",
+      "assurance": "guidance",
+      "severity": "warning",
+      "statement": "Use solution- and repository-native .NET build, analyzer, and test commands; do not modify project dependencies merely to install a policy gate."
+    }
+  ]
+}

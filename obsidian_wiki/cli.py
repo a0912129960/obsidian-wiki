@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from obsidian_wiki import __version__
+from obsidian_wiki import policy
 
 HOME = Path.home()
 GLOBAL_CONFIG_DIR = HOME / ".obsidian-wiki"
@@ -985,6 +986,90 @@ def cmd_info(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── Rules / policy governance ────────────────────────────────────────────────
+def _rules_repo(raw: str | None) -> Path:
+    return Path(raw or os.getcwd()).expanduser().resolve()
+
+
+def _print_rules_result(result: object, *, pretty: bool = True) -> None:
+    print(json.dumps(result, ensure_ascii=False, indent=2 if pretty else None, sort_keys=True))
+
+
+def cmd_rules_init(args: argparse.Namespace) -> int:
+    if args.apply and not args.config:
+        raise policy.PolicyError("rules init --apply requires a reviewed --config file", code=4)
+    project = policy.load_json(Path(args.config).expanduser().resolve()) if args.config else None
+    result = policy.initialize_repository(_rules_repo(args.repo), apply=args.apply, project=project)
+    _print_rules_result(result, pretty=args.pretty)
+    return 0
+
+
+def cmd_rules_resolve(args: argparse.Namespace) -> int:
+    repo = _rules_repo(args.repo)
+    resolved = policy.resolve_policy(repo)
+    result = {
+        "written": [],
+        "pack_sha256": policy.sha256_bytes(resolved.pack),
+        "lock": resolved.lock,
+    }
+    _print_rules_result(result, pretty=args.pretty)
+    return 0
+
+
+def cmd_rules_sync(args: argparse.Namespace) -> int:
+    result = policy.sync_repository(_rules_repo(args.repo), apply=args.apply)
+    _print_rules_result(result, pretty=args.pretty)
+    return 0
+
+
+def cmd_rules_check(args: argparse.Namespace) -> int:
+    repo = _rules_repo(args.repo)
+    report = policy.preflight(repo)
+    result: dict[str, object] = {"preflight": report, "executed_checks": []}
+    if args.execute and report["status"] == "pass":
+        executed = policy.execute_checks(repo)
+        result["executed_checks"] = executed
+        required_failed = any(item["required"] and item["status"] != "pass" for item in executed)
+        result["status"] = "fail" if required_failed else "pass"
+        result["ai_understanding"] = "not-provable"
+        if args.record and not required_failed:
+            state_home = Path(args.state_home).expanduser().resolve() if args.state_home else None
+            result["preflight_record"] = str(policy.record_preflight(repo, report, home=state_home))
+        _print_rules_result(result, pretty=args.pretty)
+        return 6 if required_failed else 0
+    if report["status"] == "pass" and args.record:
+        state_home = Path(args.state_home).expanduser().resolve() if args.state_home else None
+        result["preflight_record"] = str(policy.record_preflight(repo, report, home=state_home))
+    result["status"] = report["status"]
+    result["ai_understanding"] = "not-provable"
+    _print_rules_result(result, pretty=args.pretty)
+    return 0 if report["status"] == "pass" else 2
+
+
+def cmd_rules_install_bootstrap(args: argparse.Namespace) -> int:
+    home = Path(args.home).expanduser().resolve() if args.home else None
+    result = policy.install_bootstrap(args.agent, home=home, apply=args.apply)
+    _print_rules_result(result, pretty=args.pretty)
+    return 0
+
+
+def cmd_rules_hook(_args: argparse.Namespace) -> int:
+    try:
+        payload = policy.read_hook_payload()
+        response = policy.evaluate_hook(payload)
+    except Exception as exc:  # A hook error must fail closed, not silently allow a mutation.
+        response = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"LLM Wiki policy hook failed closed: {exc}",
+            }
+        }
+    if response is not None:
+        print(json.dumps(response, ensure_ascii=False, separators=(",", ":")))
+    return 0
+
+
 # ── Argument parsing ─────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -1145,6 +1230,54 @@ def build_parser() -> argparse.ArgumentParser:
     qq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     qq.set_defaults(func=cmd_query)
 
+    rules = sub.add_parser("rules", help="deterministic repository and global AI policy governance")
+    rules_sub = rules.add_subparsers(dest="rules_command")
+
+    rules_init = rules_sub.add_parser("init", help="inspect a repository and initialize policy inputs")
+    rules_init.add_argument("--repo", help="target repository (defaults to current directory)")
+    rules_init.add_argument("--config", help="reviewed project policy JSON proposal")
+    rules_init.add_argument("--apply", action="store_true", help="write project policy, pack, lock, and AGENTS managed block")
+    rules_init.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    rules_init.set_defaults(func=cmd_rules_init)
+
+    rules_resolve = rules_sub.add_parser("resolve", help="resolve policy inputs into a deterministic pack and lock")
+    rules_resolve.add_argument("--repo", help="target repository (defaults to current directory)")
+    rules_resolve.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    rules_resolve.set_defaults(func=cmd_rules_resolve)
+
+    rules_sync = rules_sub.add_parser("sync", help="preview or refresh generated policy artifacts and managed block")
+    rules_sync.add_argument("--repo", help="target repository (defaults to current directory)")
+    rules_sync.add_argument("--apply", action="store_true", help="apply the reported changes")
+    rules_sync.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    rules_sync.set_defaults(func=cmd_rules_sync)
+
+    rules_check = rules_sub.add_parser("check", help="prove policy preflight and optionally execute declared checks")
+    rules_check.add_argument("--repo", help="target repository (defaults to current directory)")
+    rules_check.add_argument("--preflight", action="store_true", help="explicit alias for the default deterministic preflight")
+    rules_check.add_argument("--execute", action="store_true", help="run required argv-based checks after preflight passes")
+    rules_check.add_argument("--record", action="store_true", help="record a successful preflight for the Codex hook")
+    rules_check.add_argument("--state-home", help=argparse.SUPPRESS)
+    rules_check.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    rules_check.set_defaults(func=cmd_rules_check)
+
+    install_bootstrap = rules_sub.add_parser(
+        "install-bootstrap", help="preview or install canonical bootstrap into user-level AI instruction files"
+    )
+    install_bootstrap.add_argument(
+        "--agent",
+        action="append",
+        choices=[*policy.SUPPORTED_AGENTS, "all"],
+        required=True,
+        help="target AI adapter (repeatable)",
+    )
+    install_bootstrap.add_argument("--home", help=argparse.SUPPRESS)
+    install_bootstrap.add_argument("--apply", action="store_true", help="apply changes; default is preview only")
+    install_bootstrap.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    install_bootstrap.set_defaults(func=cmd_rules_install_bootstrap)
+
+    rules_hook = rules_sub.add_parser("hook", help=argparse.SUPPRESS)
+    rules_hook.set_defaults(func=cmd_rules_hook)
+
     return p
 
 
@@ -1210,11 +1343,14 @@ def main(argv: list[str] | None = None) -> int:
     # Warn about stale installs on every command except commands that fix or report it
     # and `info` (which calls _check_stale itself with richer output).
     if getattr(args, "command", None) not in (
-        "setup", "install-skills", "update-skills", "info", "doctor", None
+        "setup", "install-skills", "update-skills", "info", "doctor", "rules", None
     ):
         _check_stale()
     try:
         return args.func(args)
+    except policy.PolicyError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return exc.code
     except (FileNotFoundError, OSError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

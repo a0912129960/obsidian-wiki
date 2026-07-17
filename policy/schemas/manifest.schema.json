@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Ar9av/obsidian-wiki/policy/manifest.schema.json",
+  "title": "LLM Wiki policy manifest",
+  "type": "object",
+  "required": ["schema_version", "canonical_json", "policy_set", "schemas", "sources", "packs", "bootstraps", "adapters"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "canonical_json": {"const": "llm-wiki-canonical-json-v1"},
+    "policy_set": {"type": "string", "minLength": 1},
+    "schemas": {"$ref": "#/$defs/assets"},
+    "sources": {"$ref": "#/$defs/assets"},
+    "packs": {"$ref": "#/$defs/assets"},
+    "bootstraps": {"$ref": "#/$defs/assets"},
+    "adapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "bootstrap", "managed_id", "default_path"],
+        "properties": {
+          "id": {"enum": ["claude", "codex", "copilot", "gemini"]},
+          "bootstrap": {"type": "string", "minLength": 1},
+          "managed_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+          "default_path": {"type": "string", "minLength": 1},
+          "home_env": {"type": "string", "minLength": 1},
+          "hook": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "sha256"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

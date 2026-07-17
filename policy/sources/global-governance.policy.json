@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "global-governance",
+  "rules": [
+    {
+      "id": "governance.preflight-before-mutation",
+      "assurance": "guidance",
+      "severity": "error",
+      "statement": "Complete deterministic policy preflight before using tools that can modify files or external state."
+    },
+    {
+      "id": "governance.fail-closed",
+      "assurance": "guidance",
+      "severity": "error",
+      "statement": "When policy inputs, resolution, pack, lock, or bootstrap validation is missing or stale, remain read-only until the failure is resolved."
+    },
+    {
+      "id": "governance.preserve-user-instructions",
+      "assurance": "guidance",
+      "severity": "error",
+      "statement": "Preserve user-authored global and repository instructions; update only an unambiguous LLM Wiki managed block or managed hook entry."
+    },
+    {
+      "id": "governance.execute-declared-checks",
+      "assurance": "executable",
+      "severity": "error",
+      "statement": "Run every required check declared in the resolved policy and report its command and exit code."
+    },
+    {
+      "id": "governance.no-understanding-claim",
+      "assurance": "guidance",
+      "severity": "warning",
+      "statement": "Do not describe policy text loading, acknowledgement, or self-reporting as proof that an AI understood or followed the policy."
+    }
+  ]
+}

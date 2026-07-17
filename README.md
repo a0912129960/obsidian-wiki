@@ -90,6 +90,24 @@ obsidian-wiki graph-analyse /path/to/vault --pretty
 
 Use `doctor` to catch broken setup, stale installs, or malformed vault state. Use `query` and `lint` when you want fast local answers without going through an agent prompt. The lower-level `graph-query`, `graph-analyse`, `batch-plan`, `cache-*`, and `ast-extract` commands are still available for automation and debugging.
 
+### Rules and policy governance
+
+LLM Wiki ships a versioned, hash-pinned policy manifest and deterministic resolver. Repository policy initialization is preview-first; applying it creates `.ai-policy` artifacts and updates only a managed block within `AGENTS.md`. Global bootstrap installation likewise preserves all content outside its managed block.
+
+```bash
+obsidian-wiki rules init --repo /path/to/repo --pretty
+obsidian-wiki rules init --repo /path/to/repo --config reviewed-policy.json --apply --pretty
+obsidian-wiki rules resolve --repo /path/to/repo --pretty
+obsidian-wiki rules sync --repo /path/to/repo --pretty
+obsidian-wiki rules check --repo /path/to/repo --preflight --pretty
+obsidian-wiki rules check --repo /path/to/repo --preflight --record --pretty
+obsidian-wiki rules check --repo /path/to/repo --execute --pretty
+obsidian-wiki rules install-bootstrap --agent codex --pretty
+obsidian-wiki rules install-bootstrap --agent codex --apply --pretty
+```
+
+`rules resolve` is read-only, and `rules check` writes hook state only with explicit `--record`. The check output separates deterministic preflight evidence, argv-based executed checks, and AI understanding, which is never reported as mechanically proven. Missing or stale policy inputs fail closed. Supported user-level bootstrap adapters are Codex (`~/.codex/AGENTS.md` plus a managed `PreToolUse` hook), Claude (`~/.claude/CLAUDE.md`), Gemini (`~/.gemini/GEMINI.md`), and Copilot (`~/.copilot/copilot-instructions.md`). Codex reports a newly installed user hook as `installed-untrusted` until the user reviews and trusts it in Codex.
+
 ### Multiple Vaults
 
 Keep a default vault active in `~/.obsidian-wiki/config`, or create named configs like `~/.obsidian-wiki/config.work` with `/wiki-switch new work`. From any directory, route one request to a named vault with `@name`, for example `@work update wiki` or `wiki-query @personal what do I know about MCP security`. The `@name` override applies only to that request and never changes your default vault.
@@ -462,6 +480,8 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | `daily-update`          | Daily maintenance cycle — freshness, index, hot cache | `/daily-update`        |
 | `impl-validator`        | Validate an implementation against its stated goal | `/impl-validator`       |
 | `graph-colorize`        | Color-code the Obsidian graph by tag/category/visibility | `/graph-colorize`   |
+| `project-rules-init`    | Research and initialize reviewed repository policy | `/project-rules-init` |
+| `ai-policy-sync`        | Preview, synchronize, and verify policy artifacts | `/ai-policy-sync` |
 | `skill-creator`         | Create new skills                                 | `/skill-creator`         |
 
 > **Note:** Slash commands (`/skill-name`) work in Claude Code, Cursor, and Windsurf. In other agents, just describe what you want and the agent will find the right skill.
