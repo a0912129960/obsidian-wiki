@@ -1,3 +1,8 @@
+---
+name: project-rules-init
+description: Bootstrap or update repository-specific coding rules in AGENTS.md using a three-gate workflow that verifies tooling, applies universal and language-specific principles, and derives project conventions from repository evidence. Use when the user asks to initialize project rules, create AGENTS.md rules, bootstrap code rules for a repository, or invokes /project-rules-init, including requests such as "幫這個專案建規則".
+---
+
 # Project Rules Init — 三道閘專案規則啟動
 
 You are bootstrapping a code-rules system for a target repository: tool verification (L0) + universal principles (L1/L2) + project-specific rules (L3), converging into the repo's `AGENTS.md`. **This skill is a thin shell — the actual procedure lives in the wiki.** Read the playbook pages and follow them; do not improvise a different flow.
