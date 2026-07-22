@@ -520,6 +520,123 @@ def _iter_files(repo: Path, suffix: str, *, limit: int = 1) -> bool:
     return False
 
 
+_TOOLCHAIN_RECOMMENDATIONS = {
+    "python": {
+        "lint": ("ruff", "https://docs.astral.sh/ruff/"),
+        "format": ("ruff", "https://docs.astral.sh/ruff/formatter/"),
+        "type-check": ("mypy", "https://mypy.readthedocs.io/en/stable/getting_started.html"),
+        "test": ("pytest", "https://docs.pytest.org/en/stable/getting-started.html"),
+    },
+    "csharp": {
+        "format": ("dotnet-format", "https://learn.microsoft.com/dotnet/core/tools/dotnet-format"),
+        "analyze": ("dotnet-analyzers", "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/overview"),
+        "test": ("dotnet-test", "https://learn.microsoft.com/dotnet/core/tools/dotnet-test"),
+    },
+    "vue-js": {
+        "lint": ("eslint", "https://eslint.vuejs.org/user-guide/"),
+        "format": ("prettier", "https://prettier.io/docs/"),
+        "style-lint": ("stylelint", "https://stylelint.io/user-guide/get-started/"),
+        "type-check": ("vue-tsc", "https://vuejs.org/guide/typescript/overview.html"),
+        "test": ("vitest", "https://vitest.dev/guide/"),
+    },
+}
+
+
+def _tooling_gap(language: str, capability: str) -> dict[str, Any]:
+    tool, official_url = _TOOLCHAIN_RECOMMENDATIONS[language][capability]
+    return {
+        "capability": capability,
+        "recommended_tool": tool,
+        "official_url": official_url,
+        "requires_approval": True,
+    }
+
+
+def assess_project_tooling(repo: Path) -> dict[str, Any]:
+    """Report visible verification tools and capability gaps without installing anything."""
+
+    repo = repo.resolve()
+    inferred = infer_project_config(repo)
+    languages = inferred["languages"]
+    detected: list[dict[str, Any]] = []
+    gaps: list[dict[str, Any]] = []
+
+    if "python" in languages:
+        pyproject = repo / "pyproject.toml"
+        python_config = pyproject.read_text(encoding="utf-8").lower() if pyproject.is_file() else ""
+        python_files = {path.name.lower() for path in repo.iterdir() if path.is_file()}
+        has_ruff = "ruff" in python_config or bool(python_files & {"ruff.toml", ".ruff.toml"})
+        has_formatter = has_ruff or "[tool.black]" in python_config
+        has_types = any(marker in python_config for marker in ("[tool.mypy]", "mypy", "pyright")) or bool(
+            python_files & {"mypy.ini", "pyrightconfig.json"}
+        )
+        has_tests = (repo / "tests").is_dir() or "pytest" in python_config
+        for capability, present, evidence in (
+            ("lint", has_ruff, "Ruff configuration or dependency"),
+            ("format", has_formatter, "Ruff or Black configuration"),
+            ("type-check", has_types, "mypy or Pyright configuration or dependency"),
+            ("test", has_tests, "pytest configuration or tests directory"),
+        ):
+            if present:
+                detected.append({"language": "python", "capability": capability, "evidence": evidence})
+            else:
+                gaps.append({"language": "python", **_tooling_gap("python", capability)})
+
+    if "csharp" in languages:
+        project_text = "\n".join(
+            path.read_text(encoding="utf-8", errors="replace").lower()
+            for path in sorted(repo.rglob("*"))
+            if path.is_file()
+            and path.name.lower().endswith((".csproj", "directory.build.props"))
+            and not {".git", "bin", "obj"}.intersection(path.relative_to(repo).parts)
+        )
+        has_format = (repo / ".editorconfig").is_file()
+        has_analyzers = any(
+            marker in project_text
+            for marker in ("stylecop.analyzers", "microsoft.codeanalysis.netanalyzers", "enablenetanalyzers")
+        )
+        has_tests = next(iter(sorted(repo.glob("*.sln"))), None) is not None
+        for capability, present, evidence in (
+            ("format", has_format, ".editorconfig"),
+            ("analyze", has_analyzers, "project analyzer configuration"),
+            ("test", has_tests, "solution detected for dotnet test"),
+        ):
+            if present:
+                detected.append({"language": "csharp", "capability": capability, "evidence": evidence})
+            else:
+                gaps.append({"language": "csharp", **_tooling_gap("csharp", capability)})
+
+    if "vue-js" in languages:
+        package_path = repo / "package.json"
+        package = load_json(package_path) if package_path.is_file() else {}
+        dependencies = {
+            **(package.get("dependencies", {}) if isinstance(package.get("dependencies"), dict) else {}),
+            **(package.get("devDependencies", {}) if isinstance(package.get("devDependencies"), dict) else {}),
+        }
+        scripts = package.get("scripts", {}) if isinstance(package.get("scripts"), dict) else {}
+        joined_scripts = " ".join(str(value).lower() for value in scripts.values())
+        vue_tools = {
+            "lint": "eslint" in dependencies or "eslint" in joined_scripts,
+            "format": "prettier" in dependencies or "prettier" in joined_scripts,
+            "style-lint": "stylelint" in dependencies or "stylelint" in joined_scripts,
+            "type-check": "vue-tsc" in dependencies or "vue-tsc" in joined_scripts,
+            "test": any(tool in dependencies or tool in joined_scripts for tool in ("vitest", "jest")),
+        }
+        for capability, present in vue_tools.items():
+            if present:
+                detected.append(
+                    {"language": "vue-js", "capability": capability, "evidence": "package dependency or script"}
+                )
+            else:
+                gaps.append({"language": "vue-js", **_tooling_gap("vue-js", capability)})
+
+    return {
+        "detected": sorted(detected, key=lambda item: (item["language"], item["capability"])),
+        "gaps": sorted(gaps, key=lambda item: (item["language"], item["capability"])),
+        "online_verification_required": bool(gaps),
+    }
+
+
 def infer_project_config(repo: Path) -> dict[str, Any]:
     """Infer only facts that are mechanically visible; never invent conventions."""
 
@@ -530,11 +647,41 @@ def infer_project_config(repo: Path) -> dict[str, Any]:
         languages.append("python")
         if (repo / "tests").is_dir():
             checks.append({"id": "python-tests", "argv": ["python", "-m", "pytest"], "required": True})
+        pyproject = repo / "pyproject.toml"
+        python_config = pyproject.read_text(encoding="utf-8").lower() if pyproject.is_file() else ""
+        root_files = {path.name.lower() for path in repo.iterdir() if path.is_file()}
+        if "ruff" in python_config or root_files & {"ruff.toml", ".ruff.toml"}:
+            checks.extend(
+                (
+                    {"id": "python-lint", "argv": ["python", "-m", "ruff", "check", "."], "required": True},
+                    {
+                        "id": "python-format-check",
+                        "argv": ["python", "-m", "ruff", "format", "--check", "."],
+                        "required": True,
+                    },
+                )
+            )
+        elif "[tool.black]" in python_config:
+            checks.append(
+                {"id": "python-format-check", "argv": ["python", "-m", "black", "--check", "."], "required": True}
+            )
+        if "[tool.mypy]" in python_config or "mypy" in python_config or "mypy.ini" in root_files:
+            checks.append({"id": "python-type-check", "argv": ["python", "-m", "mypy", "."], "required": True})
+        elif "pyright" in python_config or "pyrightconfig.json" in root_files:
+            checks.append({"id": "python-type-check", "argv": ["pyright"], "required": True})
     solution = next(iter(sorted(repo.glob("*.sln"))), None)
     if solution is not None or _iter_files(repo, ".csproj"):
         languages.append("csharp")
         if solution is not None:
             checks.append({"id": "dotnet-tests", "argv": ["dotnet", "test", solution.name], "required": True})
+            if (repo / ".editorconfig").is_file():
+                checks.append(
+                    {
+                        "id": "dotnet-format-check",
+                        "argv": ["dotnet", "format", solution.name, "--verify-no-changes"],
+                        "required": True,
+                    }
+                )
         architecture_lint = repo / "scripts" / "lint-mydimerco-architecture.ps1"
         if architecture_lint.is_file():
             checks.append(
@@ -567,6 +714,15 @@ def infer_project_config(repo: Path) -> dict[str, Any]:
         scripts = package.get("scripts", {}) if isinstance(package.get("scripts", {}), dict) else {}
         if "lint:modified" in scripts:
             checks.append({"id": "vue-lint-modified", "argv": ["npm", "run", "lint:modified"], "required": True})
+        elif "lint" in scripts:
+            checks.append({"id": "vue-lint", "argv": ["npm", "run", "lint"], "required": True})
+        for script_name, check_id in (
+            ("format:check", "vue-format-check"),
+            ("stylelint", "vue-style-lint"),
+            ("type-check", "vue-type-check"),
+        ):
+            if script_name in scripts:
+                checks.append({"id": check_id, "argv": ["npm", "run", script_name], "required": True})
         if "test:unit" in scripts:
             checks.append({"id": "vue-unit-tests", "argv": ["npm", "run", "test:unit"], "required": True})
         elif "test" in scripts:
@@ -1077,9 +1233,62 @@ def command_is_preflight_safe(command: str) -> bool:
         return all(arg not in {"--apply", "--write"} for arg in argv[3:])
     if argv[1:3] == ["rules", "init"]:
         return all(arg != "--apply" for arg in argv[3:])
+    if argv[1:3] == ["rules", "project"]:
+        return all(arg != "--apply" for arg in argv[3:])
     if argv[1:3] == ["rules", "check"]:
         return "--execute" not in argv[3:] and "--record" not in argv[3:]
     return False
+
+
+def command_is_project_policy_recovery(command: str, repo: Path) -> bool:
+    """Allow only the narrow command that creates/restores policy for this repo."""
+
+    if any(token in command for token in (";", "&", "|", ">", "<", "`", "$(", "\r", "\n")):
+        return False
+    try:
+        argv = shlex.split(command, posix=False)
+    except ValueError:
+        return False
+    if len(argv) < 4:
+        return False
+    executable = Path(argv[0].strip('"')).name.lower()
+    if executable not in {"obsidian-wiki", "obsidian-wiki.exe"} or argv[1:3] != ["rules", "project"]:
+        return False
+
+    switches = {"--apply", "--pretty"}
+    value_options = {"--repo", "--vault", "--project-id", "--config"}
+    values: dict[str, str] = {}
+    seen_switches: set[str] = set()
+    index = 3
+    while index < len(argv):
+        argument = argv[index]
+        if argument in switches:
+            if argument in seen_switches:
+                return False
+            seen_switches.add(argument)
+            index += 1
+            continue
+        if argument in value_options:
+            if argument in values or index + 1 >= len(argv):
+                return False
+            value = argv[index + 1].strip('"')
+            if not value or value.startswith("--"):
+                return False
+            values[argument] = value
+            index += 2
+            continue
+        return False
+    if "--apply" not in seen_switches:
+        return False
+
+    if "--repo" in values:
+        try:
+            requested_repo = find_repo(Path(values["--repo"]))
+        except OSError:
+            return False
+        if requested_repo.resolve() != repo.resolve():
+            return False
+    return True
 
 
 def evaluate_hook(payload: dict[str, Any], *, home: Path | None = None) -> dict[str, Any] | None:
@@ -1103,8 +1312,9 @@ def evaluate_hook(payload: dict[str, Any], *, home: Path | None = None) -> dict[
     tool_input = payload.get("tool_input")
     if tool_name == "Bash" and isinstance(tool_input, dict):
         command = tool_input.get("command")
-        if isinstance(command, str) and command_is_preflight_safe(command):
-            return None
+        if isinstance(command, str):
+            if command_is_preflight_safe(command) or command_is_project_policy_recovery(command, repo):
+                return None
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",

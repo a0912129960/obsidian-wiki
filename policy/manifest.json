@@ -19,7 +19,7 @@
     {"id": "vue-js", "path": "packs/vue-js.json", "sha256": "3a832c189a7a95ef63b88c228531f43e814e4051772c51a6b141207e1669821f"}
   ],
   "bootstraps": [
-    {"id": "global", "path": "bootstrap/global.md", "sha256": "b4a768a3d84567942b1b11fb336c64ba8692c6976f9ee279082b30c74c538d17"},
+    {"id": "global", "path": "bootstrap/global.md", "sha256": "75715b78ef78f15c937cb9ff262e81a961d594046ecd78a69d1cc655df09475c"},
     {"id": "repository", "path": "bootstrap/repository.md", "sha256": "171eea897a17a3d41a909c25dfe95e72222222c6b2971e21c241084b7c5aadb4"}
   ],
   "adapters": [

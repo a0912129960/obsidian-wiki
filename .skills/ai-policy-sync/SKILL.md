@@ -1,11 +1,11 @@
 ---
 name: ai-policy-sync
-description: Resolve, synchronize, check, and install LLM Wiki Rules/Policy Governance artifacts across repositories and supported AI user-level instruction entry points. Use for policy drift, policy pack or lock refreshes, fail-closed preflight, executable rule checks, canonical global bootstrap installation, Codex AGENTS.md or user hook setup, or /ai-policy-sync. Use project-rules-init instead when deriving a repository's initial L3 rules.
+description: Advanced internal and diagnostic workflow for resolving, synchronizing, checking, and installing LLM Wiki policy artifacts. Use for explicit policy drift diagnosis, pack/lock repair previews, executable rule checks, global bootstrap administration, Codex hook setup, or /ai-policy-sync. For normal project rule creation, restoration, and updates, use project-rules-init as the single user-facing entrypoint.
 ---
 
 # AI Policy Sync
 
-Synchronize already-reviewed policy inputs. This skill does not invent project rules; route initial or revised L3 rule derivation to `project-rules-init`.
+Synchronize already-reviewed policy inputs. This is the advanced diagnostic layer used internally by `project-rules-init`; users should not need it for the normal create/restore/update workflow. This skill does not invent project rules.
 
 ## Resolve scope
 

@@ -243,6 +243,8 @@ def test_hook_allows_only_safe_commands_without_a_current_record(monkeypatch, tm
         ("git reset --hard", False),
         ("obsidian-wiki rules check --preflight", True),
         ("obsidian-wiki rules check --preflight --record", False),
+        ("obsidian-wiki rules project --pretty", True),
+        ("obsidian-wiki rules project --apply --pretty", False),
         ("rg needle . | powershell evil.ps1", False),
         ("git status & powershell evil.ps1", False),
         ("git status\npowershell evil.ps1", False),
@@ -255,12 +257,61 @@ def test_preflight_safe_command_allowlist(command: str, expected: bool) -> None:
     assert policy.command_is_preflight_safe(command) is expected
 
 
+def test_project_policy_recovery_is_limited_to_current_repo(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    other = tmp_path / "other"
+    repo.mkdir()
+    other.mkdir()
+    (repo / ".git").mkdir()
+    (other / ".git").mkdir()
+
+    assert policy.command_is_project_policy_recovery(
+        f'obsidian-wiki rules project --repo "{repo}" --vault "{tmp_path}" --config proposal.json --apply --pretty',
+        repo,
+    )
+    assert not policy.command_is_project_policy_recovery(
+        f'obsidian-wiki rules project --repo "{other}" --apply',
+        repo,
+    )
+    assert not policy.command_is_project_policy_recovery(
+        "obsidian-wiki rules project --apply --no-record",
+        repo,
+    )
+    assert not policy.command_is_project_policy_recovery(
+        "obsidian-wiki rules project --apply & powershell evil.ps1",
+        repo,
+    )
+
+
+def test_hook_allows_only_current_repo_project_policy_recovery(monkeypatch, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    other = tmp_path / "other"
+    repo.mkdir()
+    other.mkdir()
+    (repo / ".git").mkdir()
+    (other / ".git").mkdir()
+    monkeypatch.setattr(policy, "preflight_record_is_current", lambda _repo, home=None: False)
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "cwd": str(repo),
+        "tool_name": "Bash",
+        "tool_input": {"command": "obsidian-wiki rules project --config proposal.json --apply --pretty"},
+    }
+
+    assert policy.evaluate_hook(payload) is None
+    payload["tool_input"] = {
+        "command": f'obsidian-wiki rules project --repo "{other}" --config proposal.json --apply'
+    }
+    assert policy.evaluate_hook(payload) is not None
+
+
 def test_rules_cli_parses_every_public_subcommand() -> None:
     parser = cli.build_parser()
 
     assert parser.parse_args(["rules", "init"]).func is cli.cmd_rules_init
     assert parser.parse_args(["rules", "resolve"]).func is cli.cmd_rules_resolve
     assert parser.parse_args(["rules", "sync"]).func is cli.cmd_rules_sync
+    assert parser.parse_args(["rules", "project"]).func is cli.cmd_rules_project
     assert parser.parse_args(["rules", "check"]).func is cli.cmd_rules_check
     assert parser.parse_args(["rules", "install-bootstrap", "--agent", "codex"]).func is cli.cmd_rules_install_bootstrap
 

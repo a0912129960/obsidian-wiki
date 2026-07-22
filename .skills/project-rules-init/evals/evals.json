@@ -14,13 +14,36 @@
     },
     {
       "id": 2,
-      "prompt": "This repo already has .ai-policy/project.json. Add one new review rule and refresh everything.",
-      "expected_output": "The skill treats this as a reviewed policy delta and routes materialization through sync rather than reinitializing.",
+      "prompt": "I cloned MyDimerco on a new computer. Restore its existing LLM Wiki rules into this checkout; don't make me find the old JSON or remember multiple commands.",
+      "expected_output": "The skill identifies the repository, finds the central policy, and materializes and verifies local AGENTS.md/.ai-policy artifacts through the single project workflow.",
       "files": [],
       "assertions": [
-        "The response does not recreate the project-rules-init skill or re-run rules init.",
-        "The response requests approval for the policy input change.",
-        "The response uses ai-policy-sync or rules sync after approval."
+        "The response checks the central project-policy store before researching new rules.",
+        "The response does not ask the user to manually locate or copy a proposal JSON file.",
+        "The response restores repository-local AGENTS.md and .ai-policy artifacts without committing them."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Update this project's AI rules based on the current architecture and keep LLM Wiki as the reusable source of truth.",
+      "expected_output": "The skill compares central and local state, researches the delta, requests approval for policy content changes, then updates central and local artifacts together.",
+      "files": [],
+      "assertions": [
+        "The response starts with the single project state check rather than asking the user to choose init, sync, or check.",
+        "The response requests approval for the complete changed policy before writing.",
+        "The response updates both the central vault policy and repository-local enforcement artifacts and runs preflight."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Set up rules for this Python repository. It has pytest but no linter, formatter, or type checker. Recommend current tools, but do not change dependencies until I approve the complete proposal.",
+      "expected_output": "The skill reports deterministic tooling gaps, verifies candidates with official sources, and stops before dependency or policy writes.",
+      "files": [],
+      "assertions": [
+        "The response distinguishes detected tools from missing capabilities.",
+        "The response cites official tool documentation and lists exact proposed file changes and argv checks.",
+        "The response does not reject Ruff or a type checker solely because adding development tooling requires approval.",
+        "The response does not install tools, change dependency files, or apply policy before explicit approval."
       ]
     }
   ]

@@ -100,21 +100,17 @@ obsidian-wiki graph-analyse /path/to/vault --pretty
 
 ### Rules / Policy Governance
 
-LLM Wiki 內建版本化且以雜湊固定的 policy manifest，以及 deterministic resolver。Repository policy 初始化預設只預覽；套用時建立 `.ai-policy` artifacts，且在 `AGENTS.md` 內只更新 managed block。全域 bootstrap 安裝也會完整保留 managed block 以外的既有內容。
+LLM Wiki 會在知識庫集中保存每個專案已核准的規則，並將強制執行所需的檔案產生到專案內。一般使用者只需要在目標專案呼叫一次：
 
 ```bash
-obsidian-wiki rules init --repo /path/to/repo --pretty
-obsidian-wiki rules init --repo /path/to/repo --config reviewed-policy.json --apply --pretty
-obsidian-wiki rules resolve --repo /path/to/repo --pretty
-obsidian-wiki rules sync --repo /path/to/repo --pretty
-obsidian-wiki rules check --repo /path/to/repo --preflight --pretty
-obsidian-wiki rules check --repo /path/to/repo --preflight --record --pretty
-obsidian-wiki rules check --repo /path/to/repo --execute --pretty
-obsidian-wiki rules install-bootstrap --agent codex --pretty
-obsidian-wiki rules install-bootstrap --agent codex --apply --pretty
+/project-rules-init
 ```
 
-`rules resolve` 永遠唯讀；`rules check` 也只有明確加上 `--record` 才會寫入 hook state。輸出會分開呈現 deterministic preflight 證據、以 argv 執行的規則檢查，以及永遠不能宣稱已被機械證明的 AI 理解。Policy input 缺少或過期時會 fail-closed。支援的 user-level bootstrap adapter 包括 Codex（`~/.codex/AGENTS.md` 與受管理的 `PreToolUse` hook）、Claude（`~/.claude/CLAUDE.md`）、Gemini（`~/.gemini/GEMINI.md`）及 Copilot（`~/.copilot/copilot-instructions.md`）。Codex 新安裝的 user hook 在使用者審閱並信任前會回報為 `installed-untrusted`。
+此 skill 會自動判斷是首次建立、在新環境還原、更新既有規則、收納既有本機規則，或完全不需修改。中央規則位於 `<vault>/_meta/project-rules/`；專案內的 `AGENTS.md` 與 `.ai-policy/` 是本機產生的執行檔案，skill 不會將它們 commit 或 push。
+
+`obsidian-wiki rules project --pretty` 是供 skill 與診斷使用的底層預覽指令。規則內容經核准後，同一指令加上 `--apply` 會儲存中央規則、產生專案規則、執行 preflight 並記錄成功狀態。原有的 `rules init`、`resolve`、`sync` 與 `check` 保留作為進階診斷指令。
+
+預覽也會列出專案現有的 lint、format、analyzer、type-check、test 能力與缺口建議。`/project-rules-init` 會以官方文件確認缺少工具的候選方案，並把所有依賴與設定變更列入批准提案；取得批准前絕不安裝推薦工具。
 
 ### 多個 Vault
 
@@ -477,8 +473,8 @@ git remote add origin https://github.com/you/my-wiki.git
 | `daily-update` | Daily maintenance cycle：freshness、index、hot cache | `/daily-update` |
 | `impl-validator` | 根據 stated goal 驗證 implementation | `/impl-validator` |
 | `graph-colorize` | 依 tag/category/visibility 為 Obsidian graph 上色 | `/graph-colorize` |
-| `project-rules-init` | 研究並初始化經審核的 repository policy | `/project-rules-init` |
-| `ai-policy-sync` | 預覽、同步並驗證 policy artifacts | `/ai-policy-sync` |
+| `project-rules-init` | 建立、還原或更新由 LLM Wiki 集中管理的專案規則 | `/project-rules-init` |
+| `ai-policy-sync` | 進階 policy drift 與 bootstrap 診斷 | `/ai-policy-sync` |
 | `skill-creator` | 建立新的 skills | `/skill-creator` |
 
 > **Note:** Slash commands（`/skill-name`）可在 Claude Code、Cursor 與 Windsurf 使用。在其他 agents 中，只要描述你想做什麼，agent 會找到正確的 skill。

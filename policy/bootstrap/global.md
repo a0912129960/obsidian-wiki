@@ -1,6 +1,8 @@
 # LLM Wiki Policy Governance
 
-- Before using a tool that can modify files or external state, run `obsidian-wiki rules check --preflight --record` in the target repository.
+- For normal project rule creation, restoration, or updates, invoke the `project-rules-init` skill; it selects the correct workflow without requiring the user to remember lower-level commands.
+- Before other tool use that can modify files or external state, run `obsidian-wiki rules check --preflight --record` in the target repository.
+- When a repository has no current preflight record, only the narrowly validated `obsidian-wiki rules project --apply` recovery command may materialize an explicitly approved policy for that same repository; it must finish by recording a passing preflight.
 - Treat a missing, stale, or conflicting policy lock as fail-closed: continue read-only investigation, but do not modify state.
 - Read `.ai-policy/policy-pack.md` before implementation and use `.ai-policy/policy.lock.json` as the resolved policy identity.
 - Keep three assurance classes separate in every report:

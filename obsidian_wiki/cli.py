@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from obsidian_wiki import policy
+from obsidian_wiki import policy, project_rules
 
 HOME = Path.home()
 GLOBAL_CONFIG_DIR = HOME / ".obsidian-wiki"
@@ -1134,6 +1134,37 @@ def cmd_rules_sync(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rules_project(args: argparse.Namespace) -> int:
+    """Inspect or apply centrally managed rules for the current project."""
+
+    vault_value = args.vault or _read_config_value("OBSIDIAN_VAULT_PATH")
+    if not vault_value:
+        raise policy.PolicyError("OBSIDIAN_VAULT_PATH is not configured; run wiki-setup", code=4)
+    vault = Path(vault_value).expanduser().resolve(strict=True)
+    repo = policy.find_repo(_rules_repo(args.repo))
+    proposed = policy.load_json(Path(args.config).expanduser().resolve()) if args.config else None
+    if args.apply:
+        state_home = Path(args.state_home).expanduser().resolve() if args.state_home else None
+        result = project_rules.apply_project_rules(
+            repo,
+            vault,
+            project_id=args.project_id,
+            proposed=proposed,
+            record_preflight=not args.no_record,
+            state_home=state_home,
+        )
+    else:
+        result = project_rules.inspect_project_rules(
+            repo,
+            vault,
+            project_id=args.project_id,
+            proposed=proposed,
+        )
+        result["applied"] = False
+    _print_rules_result(result, pretty=args.pretty)
+    return 0
+
+
 def cmd_rules_check(args: argparse.Namespace) -> int:
     repo = _rules_repo(args.repo)
     report = policy.preflight(repo)
@@ -1362,6 +1393,19 @@ def build_parser() -> argparse.ArgumentParser:
     rules_sync.add_argument("--apply", action="store_true", help="apply the reported changes")
     rules_sync.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     rules_sync.set_defaults(func=cmd_rules_sync)
+
+    rules_project = rules_sub.add_parser(
+        "project", help="inspect or apply the current project's centrally managed rules"
+    )
+    rules_project.add_argument("--repo", help="target repository (defaults to current directory)")
+    rules_project.add_argument("--vault", help="override the configured Obsidian vault")
+    rules_project.add_argument("--project-id", help="stable identity override when no Git remote is available")
+    rules_project.add_argument("--config", help="reviewed project policy JSON proposal")
+    rules_project.add_argument("--apply", action="store_true", help="store and materialize the selected policy")
+    rules_project.add_argument("--no-record", action="store_true", help="do not record successful preflight state")
+    rules_project.add_argument("--state-home", help=argparse.SUPPRESS)
+    rules_project.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    rules_project.set_defaults(func=cmd_rules_project)
 
     rules_check = rules_sub.add_parser("check", help="prove policy preflight and optionally execute declared checks")
     rules_check.add_argument("--repo", help="target repository (defaults to current directory)")

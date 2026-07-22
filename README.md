@@ -106,21 +106,19 @@ Use `doctor` to catch broken setup, stale installs, or malformed vault state. Us
 
 ### Rules and policy governance
 
-LLM Wiki ships a versioned, hash-pinned policy manifest and deterministic resolver. Repository policy initialization is preview-first; applying it creates `.ai-policy` artifacts and updates only a managed block within `AGENTS.md`. Global bootstrap installation likewise preserves all content outside its managed block.
+LLM Wiki centrally stores each repository's approved policy in the vault and materializes enforcement artifacts into the repository. From the target repository, the normal user-facing workflow is a single agent request:
 
-```bash
-obsidian-wiki rules init --repo /path/to/repo --pretty
-obsidian-wiki rules init --repo /path/to/repo --config reviewed-policy.json --apply --pretty
-obsidian-wiki rules resolve --repo /path/to/repo --pretty
-obsidian-wiki rules sync --repo /path/to/repo --pretty
-obsidian-wiki rules check --repo /path/to/repo --preflight --pretty
-obsidian-wiki rules check --repo /path/to/repo --preflight --record --pretty
-obsidian-wiki rules check --repo /path/to/repo --execute --pretty
-obsidian-wiki rules install-bootstrap --agent codex --pretty
-obsidian-wiki rules install-bootstrap --agent codex --apply --pretty
+```text
+/project-rules-init
 ```
 
-`rules resolve` is read-only, and `rules check` writes hook state only with explicit `--record`. The check output separates deterministic preflight evidence, argv-based executed checks, and AI understanding, which is never reported as mechanically proven. Missing or stale policy inputs fail closed. Supported user-level bootstrap adapters are Codex (`~/.codex/AGENTS.md` plus a managed `PreToolUse` hook), Claude (`~/.claude/CLAUDE.md`), Gemini (`~/.gemini/GEMINI.md`), and Copilot (`~/.copilot/copilot-instructions.md`). Codex reports a newly installed user hook as `installed-untrusted` until the user reviews and trusts it in Codex.
+The skill detects whether it must create rules for the first time, restore approved rules into a new checkout, update changed rules, capture an existing local policy, or do nothing. Canonical policies live under `<vault>/_meta/project-rules/`; generated `AGENTS.md` and `.ai-policy/` files remain local to the target repository and are never committed or pushed by the skill.
+
+For automation and diagnostics, `obsidian-wiki rules project --pretty` previews the detected state in the current repository. After policy-content approval, the skill uses the same command with `--apply`; it centrally stores the policy, materializes local artifacts, runs preflight, and records the successful state. The older `rules init`, `resolve`, `sync`, and `check` commands remain available as lower-level diagnostic operations.
+
+The preview also reports repository-native lint, format, analyzer, type-check, and test capabilities plus missing capability recommendations. `/project-rules-init` verifies missing-tool candidates against official documentation and includes every dependency or configuration change in the approval proposal; it never installs a recommended tool before approval.
+
+Missing or stale policy inputs fail closed. Supported user-level bootstrap adapters are Codex (`~/.codex/AGENTS.md` plus a managed `PreToolUse` hook), Claude (`~/.claude/CLAUDE.md`), Gemini (`~/.gemini/GEMINI.md`), and Copilot (`~/.copilot/copilot-instructions.md`). Codex reports a newly installed user hook as `installed-untrusted` until the user reviews and trusts it in Codex.
 
 ### Multiple Vaults
 
@@ -485,8 +483,8 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | `daily-update`          | Daily maintenance cycle — freshness, index, hot cache | `/daily-update`        |
 | `impl-validator`        | Validate an implementation against its stated goal | `/impl-validator`       |
 | `graph-colorize`        | Color-code the Obsidian graph by tag/category/visibility | `/graph-colorize`   |
-| `project-rules-init`    | Research and initialize reviewed repository policy | `/project-rules-init` |
-| `ai-policy-sync`        | Preview, synchronize, and verify policy artifacts | `/ai-policy-sync` |
+| `project-rules-init`    | Create, restore, or update centrally managed repository rules | `/project-rules-init` |
+| `ai-policy-sync`        | Advanced policy drift and bootstrap diagnostics | `/ai-policy-sync` |
 | `skill-creator`         | Create new skills                                 | `/skill-creator`         |
 
 > **Note:** Slash commands (`/skill-name`) work in Claude Code, Cursor, and Windsurf. In other agents, just describe what you want and the agent will find the right skill.
