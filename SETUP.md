@@ -2,27 +2,41 @@
 
 A skill-based framework for AI coding agents — Claude Code, Cursor, Windsurf, Pi, Gemini CLI, Google Antigravity, Codex, Hermes, OpenClaw, OpenCode, Aider, Factory Droid, Trae / Trae CN, Kiro, GitHub Copilot (CLI + VS Code Chat) — to build and maintain an Obsidian wiki using Karpathy's LLM Wiki pattern. No scripts, no API keys — the agent **is** the LLM.
 
-> Running `bash setup.sh` wires up every supported agent: project-local skill symlinks (`.claude/skills/`, `.cursor/skills/`, `.windsurf/skills/`, `.agents/skills/`, `.kiro/skills/`), global symlinks (`~/.claude/skills/`, `~/.gemini/skills/`, `~/.codex/skills/`, `~/.hermes/skills/`, `~/.openclaw/skills/`, `~/.copilot/skills/`, `~/.trae/skills/`, `~/.trae-cn/skills/`, `~/.kiro/skills/`, `~/.agents/skills/`), and always-on rule files (`CLAUDE.md`, `GEMINI.md`, `AGENTS.md`, `.hermes.md`, `.cursor/rules/…`, `.windsurf/rules/…`, `.kiro/steering/…`, `.agent/rules/…`, `.agent/workflows/…`, `.github/copilot-instructions.md`). See the [Agent Compatibility table in README.md](README.md#agent-compatibility) for the full matrix.
+> `setup.sh` is retained only for legacy Unix symlink setup. It does not update
+> the CLI skill content version. Use `obsidian-wiki install-skills --copy` for
+> supported skill updates and version tracking.
 
-## Install via pip (no clone needed)
+## Install this local fork
 
 ```bash
-pip install obsidian-wiki
+git clone <your-fork-url>
+cd obsidian-wiki
+pip install -e .
 obsidian-wiki setup --vault /path/to/your/vault
 ```
 
 On the first run this creates `~/.obsidian-wiki/config` and installs every skill into all supported agents' skills directories. Once the config exists, setup preserves it byte-for-byte. Add `--project .` to also drop project-local skills and the `AGENTS.md` / rule files into the current repo.
 
-Update the package and skills without touching config:
+This project does not use the published package as an update source. Do not run
+`pip install -U obsidian-wiki`; it can replace this fork's editable installation.
+
+After adding or changing skills, deploy the current checkout without touching
+config:
 
 ```bash
-pip install -U obsidian-wiki
 obsidian-wiki install-skills
 # Windows without symlink privilege:
 obsidian-wiki install-skills --copy
 ```
 
-For local development use `pip install -e .` in place of the package upgrade. To maintain a personal default, copy a working `~/.obsidian-wiki/config` to `~/.obsidian-wiki/default.env`; restore it only with an explicit copy when you intend to replace config. The CLI never rewrites either an existing config or that template. Run `obsidian-wiki info` to see resolved paths.
+Run `pip install -e .` again only when creating a Python environment or repairing the editable link. To maintain a personal default, copy a working `~/.obsidian-wiki/config` to `~/.obsidian-wiki/default.env`; restore it only with an explicit copy when you intend to replace config. The CLI never rewrites either an existing config or that template. Run `obsidian-wiki info` to see resolved paths.
+
+The Python package version remains Git-tag-derived. Local skill changes are
+versioned separately by a deterministic SHA-256 content hash. Every
+`obsidian-wiki install-skills --copy` run records the package version, source
+commit and dirty state, skill content version, and installation time in
+`~/.obsidian-wiki/install-state.json`. Use `obsidian-wiki info` to display this
+state and `obsidian-wiki doctor` to verify installed copies against this checkout.
 
 Useful local commands after setup:
 
@@ -32,7 +46,8 @@ obsidian-wiki query "what do I know about rate limiting?"
 obsidian-wiki lint
 ```
 
-The rest of this doc covers the `git clone` + `setup.sh` path.
+The rest of this doc describes the legacy `setup.sh` path for maintenance only;
+it is not the supported skill update or version-tracking workflow.
 
 ## Quick Start (git clone)
 

@@ -23,34 +23,49 @@ We built a framework around that idea. Every skill is a markdown file that any A
 
 ### Let your agent set it up
 
-The fastest path — no commands required. Give your agent this repo and say:
+The fastest path — no commands required. Give your agent this local checkout and say:
 
 ```
-https://github.com/Ar9av/obsidian-wiki — set up my wiki
+C:\path\to\your\obsidian-wiki — set up my wiki
 ```
 
 The agent reads [`.skills/wiki-setup/SKILL.md`](.skills/wiki-setup/SKILL.md) from the repo, asks where you want your vault to live, and initializes the full structure: directories, index, log, Obsidian config, and an optional auto-capture hook. That's it — the skill is the setup guide.
 
 This works in any agent that can read files (Claude Code, Cursor, Windsurf, Codex, Gemini CLI, Kiro, and more). After setup, every wiki skill is available immediately.
 
-### Install via pip (recommended)
+### Install this local fork
 
 ```bash
-pip install obsidian-wiki
+git clone <your-fork-url>
+cd obsidian-wiki
+pip install -e .
 obsidian-wiki setup --vault /path/to/your/digital/brain
 ```
 
 On the first run, `obsidian-wiki setup` creates `~/.obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Once that config exists it is user-owned: later setup runs preserve it byte-for-byte, and `--vault` is rejected instead of overwriting it.
 
-To update, keep package and skill installation separate:
+This repository is maintained as a local fork and does not use the published
+`obsidian-wiki` package as an update source. Do not run `pip install -U
+obsidian-wiki`; it can replace the editable installation with an unrelated
+published build.
+
+After adding or changing skills, deploy the current checkout directly:
 
 ```bash
-pip install -U obsidian-wiki
 obsidian-wiki install-skills          # refresh links; never modifies config
 obsidian-wiki install-skills --copy   # Windows fallback without symlink privilege
 ```
 
-For a local editable checkout, use `pip install -e .` instead of `pip install -U obsidian-wiki`, then run the same `install-skills` command. Open a new agent session after refreshing skills.
+Run `pip install -e .` again only when creating a Python environment or repairing
+the editable link. Open a new agent session after refreshing skills.
+
+`install-skills` records two different versions in
+`~/.obsidian-wiki/install-state.json`: the Git-derived Python package version and
+a SHA-256 version of the actual skill contents. Local skill edits do not pretend
+to be a new released package version. Each `install-skills --copy` run updates
+the skill content version, source commit/dirty state, and installation time.
+`obsidian-wiki info` displays them; `obsidian-wiki doctor` detects source changes
+after installation and copied skill content that differs from this checkout.
 
 ```bash
 obsidian-wiki list              # list the bundled skills
@@ -114,27 +129,18 @@ Keep a default vault active in `~/.obsidian-wiki/config`, or create named config
 
 All supported agents can use this syntax after `obsidian-wiki setup` or `setup.sh`, because the shared skills and always-on bootstrap files all point back to the same Config Resolution Protocol. The routing token works with write skills (`@work update wiki`, `@research save this`) and read skills (`wiki-query @personal what do I know about X`).
 
-### Install via Skills CLI (deprecated)
+### Legacy shell setup
 
 ```bash
-npx skills add Ar9av/obsidian-wiki
-```
-
-This only installs the markdown skills into the current agent. It does **not** write `~/.obsidian-wiki/config`, install `~/.obsidian-wiki/sync.sh`, or wire the global multi-agent bootstrap that `obsidian-wiki setup` / `setup.sh` performs.
-
-Use this path only if you intentionally want a partial, agent-local install and are prepared to manage config yourself. For a complete setup, use **Install via pip** or **Install via git clone** instead.
-
-Browse the full skill list at [skills.sh/ar9av/obsidian-wiki](https://skills.sh/ar9av/obsidian-wiki).
-
-### Install via git clone
-
-```bash
-git clone https://github.com/Ar9av/obsidian-wiki.git
+git clone <your-fork-url>
 cd obsidian-wiki
 bash setup.sh
 ```
 
-When config is missing, `setup.sh` asks for your vault path and creates `~/.obsidian-wiki/config`. If config already exists, it is preserved unchanged. The script also symlinks skills into your agents and installs `wiki-update` globally so you can use it from any project.
+`setup.sh` is retained for legacy Unix symlink setup. It does not write the CLI
+skill content version and is not the supported update path. Use
+`obsidian-wiki install-skills --copy` for every skill update so installation state
+and content verification remain accurate.
 
 Open the project in your agent and say **"set up my wiki"**. That's it.
 

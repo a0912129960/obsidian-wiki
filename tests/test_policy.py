@@ -32,6 +32,21 @@ def test_canonical_policy_manifest_is_complete_and_hash_pinned() -> None:
     assert {item["id"] for item in manifest["adapters"]} == set(policy.SUPPORTED_AGENTS)
 
 
+def test_change_authority_guardrails_are_shipped() -> None:
+    root = policy.policy_root()
+    source = policy.load_json(root / "sources" / "global-governance.policy.json")
+    rule_ids = {rule["id"] for rule in source["rules"]}
+    bootstrap = (root / "bootstrap" / "global.md").read_text(encoding="utf-8")
+    agents = (Path(__file__).parents[1] / "AGENTS.md").read_text(encoding="utf-8")
+
+    assert "governance.local-workaround-boundary" in rule_ids
+    assert "governance.public-workflow-change-approval" in rule_ids
+    assert "governance.install-source-awareness" in rule_ids
+    assert "do not promote their workarounds into repository workflows" in bootstrap
+    assert "never replace a local editable fork with a remote package" in bootstrap
+    assert "## Change Authority Gate" in agents
+
+
 def test_manifest_rejects_a_tampered_asset(tmp_path: Path) -> None:
     root = tmp_path / "policy"
     shutil.copytree(policy.policy_root(), root)

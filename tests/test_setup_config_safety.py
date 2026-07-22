@@ -119,3 +119,66 @@ def test_update_skills_alias_routes_to_config_free_command() -> None:
 
     assert args.func is cli.cmd_install_skills
     assert args.copy is True
+
+
+def test_install_skills_records_local_source_and_content_version(monkeypatch, tmp_path: Path) -> None:
+    _config, install_state = _redirect_paths(monkeypatch, tmp_path)
+    skills = tmp_path / "repo" / ".skills"
+    skill = skills / "example"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# version one\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "skills_dir", lambda: skills)
+    monkeypatch.setattr(cli, "install_global_skills", lambda _mode: None)
+
+    args = argparse.Namespace(copy=True, project=None, project_only=False)
+    assert cli.cmd_install_skills(args) == 0
+    first = json.loads(install_state.read_text(encoding="utf-8"))
+
+    assert first["package_version"] == cli.__version__
+    assert first["source_commit"] == "not-a-git-checkout"
+    assert first["source_dirty"] is False
+    assert len(first["skills_content_hash"]) == 64
+    assert first["installed_at"]
+
+    (skill / "SKILL.md").write_text("# version two\n", encoding="utf-8")
+    assert cli.cmd_install_skills(args) == 0
+    second = json.loads(install_state.read_text(encoding="utf-8"))
+
+    assert second["skills_content_hash"] != first["skills_content_hash"]
+
+
+def test_skill_content_version_matches_copy_and_symlink(monkeypatch, tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    skill = source / "example"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# example\n", encoding="utf-8")
+    copied = tmp_path / "copied"
+    linked = tmp_path / "linked"
+
+    monkeypatch.setattr(cli, "skills_dir", lambda: source)
+    source_hash = cli._skills_content_hash(source)
+    cli.install_skills(copied, "copy-test", mode="copy", quiet=True)
+    try:
+        cli.install_skills(linked, "link-test", mode="symlink", quiet=True)
+    except OSError:
+        linked = source
+
+    assert cli._skills_content_hash(copied) == source_hash
+    assert cli._skills_content_hash(linked) == source_hash
+
+
+def test_local_fork_docs_never_recommend_remote_package_upgrade() -> None:
+    root = Path(__file__).parents[1]
+    forbidden = "pip install -U obsidian-wiki"
+
+    for name in ("README.md", "README_TW.md", "SETUP.md"):
+        lines = (root / name).read_text(encoding="utf-8").splitlines()
+        assert forbidden not in lines
+    assert "pip install --force-reinstall obsidian-wiki" not in (
+        root / "obsidian_wiki" / "cli.py"
+    ).read_text(encoding="utf-8")
+    for name in ("README.md", "README_TW.md"):
+        content = (root / name).read_text(encoding="utf-8")
+        assert "npx skills add Ar9av/obsidian-wiki" not in content
+        assert "git clone https://github.com/Ar9av/obsidian-wiki" not in content
+    assert not (root / ".github" / "workflows" / "publish.yml").exists()

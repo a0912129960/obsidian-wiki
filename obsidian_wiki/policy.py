@@ -117,7 +117,9 @@ def policy_root() -> Path:
     for candidate in (package_root / "_data" / "policy", package_root.parent / "policy"):
         if (candidate / "manifest.json").is_file():
             return candidate
-    raise PolicyError("canonical policy assets are missing; reinstall obsidian-wiki")
+    raise PolicyError(
+        "canonical policy assets are missing; from the local repository root run: pip install -e ."
+    )
 
 
 def _safe_asset(root: Path, relative: str) -> Path:

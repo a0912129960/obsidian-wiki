@@ -8,7 +8,7 @@
   ],
   "sources": [
     {"id": "csharp", "path": "sources/csharp.policy.json", "sha256": "c0ddf3060743cb9ef32dd53b40345df2db9a6c03c03df71d255ff56164ce3333"},
-    {"id": "global-governance", "path": "sources/global-governance.policy.json", "sha256": "3665ef2bcae8473c2f7732de31e197fea53565f7c324a126acea6e9c0a7cbb3a"},
+    {"id": "global-governance", "path": "sources/global-governance.policy.json", "sha256": "fa9ab58a8af84d508be710467969167d2dcc668d063c7f033d6a30f16e730d1f"},
     {"id": "python", "path": "sources/python.policy.json", "sha256": "68f22ba245b2c3363e9309e4e0a5213d9f373ed14b0947db3e1112761de0c50e"},
     {"id": "vue-js", "path": "sources/vue-js.policy.json", "sha256": "ed285c96291f135728c294531385b8d59ff0539d207a231068012aca01b41631"}
   ],
@@ -19,7 +19,7 @@
     {"id": "vue-js", "path": "packs/vue-js.json", "sha256": "3a832c189a7a95ef63b88c228531f43e814e4051772c51a6b141207e1669821f"}
   ],
   "bootstraps": [
-    {"id": "global", "path": "bootstrap/global.md", "sha256": "0d4673df36f297c5548c516d512fd3bc48a1d0ba8aed106fe931f569c7f8576d"},
+    {"id": "global", "path": "bootstrap/global.md", "sha256": "b4a768a3d84567942b1b11fb336c64ba8692c6976f9ee279082b30c74c538d17"},
     {"id": "repository", "path": "bootstrap/repository.md", "sha256": "171eea897a17a3d41a909c25dfe95e72222222c6b2971e21c241084b7c5aadb4"}
   ],
   "adapters": [

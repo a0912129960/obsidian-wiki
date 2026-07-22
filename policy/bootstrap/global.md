@@ -8,3 +8,6 @@
   - **Executed checks**: commands that actually ran, with exit codes and results.
   - **AI understanding**: guidance supplied to the model; never claim this is mechanically proven.
 - Preserve user-authored instructions. Automation may create or replace only the matching `llm-wiki-global-bootstrap` or `llm-wiki-repository-policy` managed block and the structurally identified LLM Wiki Codex hook entry.
+- Treat machine-specific dependency, permission, encoding, network, and tool failures as local environment issues; do not promote their workarounds into repository workflows.
+- Require explicit user approval before changing public install/update commands, build configuration, versioning, or supported workflows.
+- Determine whether software comes from a published package, editable checkout, or another source before giving install/update instructions; never replace a local editable fork with a remote package unless the user explicitly requests it.

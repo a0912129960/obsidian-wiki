@@ -31,6 +31,24 @@
       "assurance": "guidance",
       "severity": "warning",
       "statement": "Do not describe policy text loading, acknowledgement, or self-reporting as proof that an AI understood or followed the policy."
+    },
+    {
+      "id": "governance.local-workaround-boundary",
+      "assurance": "guidance",
+      "severity": "error",
+      "statement": "Treat machine-specific dependency, permission, encoding, network, and tool failures as local environment issues; do not promote their workarounds into repository workflows."
+    },
+    {
+      "id": "governance.public-workflow-change-approval",
+      "assurance": "guidance",
+      "severity": "error",
+      "statement": "Obtain explicit user approval before changing public install or update commands, build configuration, versioning, or supported workflows."
+    },
+    {
+      "id": "governance.install-source-awareness",
+      "assurance": "guidance",
+      "severity": "error",
+      "statement": "Determine whether software comes from a published package, editable checkout, or another source before giving install or update instructions; never replace a local editable fork with a remote package unless the user explicitly requests it."
     }
   ]
 }

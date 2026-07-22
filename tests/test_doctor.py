@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+from obsidian_wiki import cli
 from obsidian_wiki.cli import list_skills
 from obsidian_wiki import __version__
 
@@ -45,12 +47,19 @@ def _install_all_skills(home: Path) -> None:
     target.mkdir(parents=True, exist_ok=True)
     for name in list_skills():
         skill_dir = target / name
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+        shutil.copytree(cli.skills_dir() / name, skill_dir)
     config_dir = home / ".obsidian-wiki"
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "install-state.json").write_text(
-        json.dumps({"version": __version__, "mode": "copy"}) + "\n",
+        json.dumps({
+            "version": __version__,
+            "package_version": __version__,
+            "skills_content_hash": cli._skills_content_hash(cli.skills_dir()),
+            "source_commit": "test",
+            "source_dirty": False,
+            "installed_at": "2026-07-22T00:00:00+00:00",
+            "mode": "copy",
+        }) + "\n",
         encoding="utf-8",
     )
 
@@ -97,6 +106,26 @@ def test_doctor_fails_on_invalid_manifest(tmp_path: Path) -> None:
     data = json.loads(proc.stdout)
     assert data["status"] == "fail"
     assert any(check["name"] == "manifest-json" and check["status"] == "fail" for check in data["checks"])
+
+
+def test_doctor_fails_when_installed_skill_content_differs_from_source(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    (home / ".claude" / "skills" / list_skills()[0] / "SKILL.md").write_text(
+        "tampered\n", encoding="utf-8"
+    )
+
+    proc = _run(home, "doctor", "--json")
+
+    assert proc.returncode == 1
+    data = json.loads(proc.stdout)
+    assert any(
+        check["name"] == "agent-installs" and check["status"] == "fail"
+        for check in data["checks"]
+    )
 
 
 def test_doctor_strict_turns_warnings_into_nonzero_exit(tmp_path: Path) -> None:

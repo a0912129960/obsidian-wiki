@@ -1,19 +1,19 @@
-"""obsidian-wiki installer CLI.
+"""Install this local fork's skills into supported AI agents.
 
-Python port of ``setup.sh`` for the pip-installed package. The skill content
-lives inside the installed package (``obsidian_wiki/_data/skills``) instead of a
-cloned repo, so this wires the bundled skills into every supported AI agent's
-skills directory. Initial setup creates ``~/.obsidian-wiki/config``; later
-setup and skill-refresh runs preserve that user-owned file unchanged.
+Initial setup creates ``~/.obsidian-wiki/config``; later setup and skill-refresh
+runs preserve that user-owned file unchanged.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from obsidian_wiki import __version__
@@ -43,8 +43,8 @@ def skills_dir() -> Path:
         if cand.is_dir():
             return cand
     raise FileNotFoundError(
-        "Could not locate bundled skills. Reinstall obsidian-wiki "
-        "(`pip install --force-reinstall obsidian-wiki`)."
+        "Could not locate bundled skills. From this fork's repository root, "
+        "repair the editable installation with `pip install -e .`."
     )
 
 
@@ -66,6 +66,50 @@ def bootstrap_dir() -> Path | None:
 
 def list_skills() -> list[str]:
     return sorted(p.name for p in skills_dir().iterdir() if p.is_dir())
+
+
+def _skills_content_hash(root: Path, names: list[str] | None = None) -> str:
+    """Return a deterministic hash of the selected skill trees."""
+    selected = names or sorted(p.name for p in root.iterdir() if p.is_dir())
+    digest = hashlib.sha256()
+    for name in sorted(selected):
+        skill = root / name
+        if not skill.is_dir():
+            digest.update(f"missing:{name}\n".encode())
+            continue
+        resolved_skill = skill.resolve()
+        for path in sorted(p for p in resolved_skill.rglob("*") if p.is_file()):
+            relative = (Path(name) / path.relative_to(resolved_skill)).as_posix()
+            digest.update(relative.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _source_revision() -> tuple[str, bool]:
+    """Return the local checkout revision and whether it has uncommitted changes."""
+    repo = skills_dir().parent
+    if not (repo / ".git").exists():
+        return "not-a-git-checkout", False
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip())
+        return commit, dirty
+    except (OSError, subprocess.CalledProcessError):
+        return "unavailable", False
 
 
 # ── Skill installation ───────────────────────────────────────────────────────
@@ -113,8 +157,7 @@ def install_skills(
 
 
 # Agents whose skills directory lives under $HOME. (path-under-home, label,
-# subset). All get every skill — pip users have no cloned repo to host
-# project-scoped skills, so everything must be globally discoverable.
+# subset). All get every skill so the local checkout is globally discoverable.
 GLOBAL_AGENT_DIRS: list[tuple[str, str, tuple[str, ...] | None]] = [
     (".claude/skills", "~/.claude/skills/ (Claude Code)", None),
     (".gemini/skills", "~/.gemini/skills/ (Gemini CLI)", None),
@@ -295,13 +338,22 @@ def write_config(vault_path: str) -> None:
 
 def _write_install_state(mode: str) -> None:
     GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    source_commit, source_dirty = _source_revision()
     INSTALL_STATE.write_text(
-        json.dumps({"version": __version__, "mode": mode}, indent=2) + "\n",
+        json.dumps({
+            "version": __version__,
+            "package_version": __version__,
+            "source_commit": source_commit,
+            "source_dirty": source_dirty,
+            "skills_content_hash": _skills_content_hash(skills_dir()),
+            "installed_at": datetime.now(timezone.utc).isoformat(),
+            "mode": mode,
+        }, indent=2) + "\n",
         encoding="utf-8",
     )
 
 
-def _read_install_state() -> dict[str, str]:
+def _read_install_state() -> dict[str, object]:
     if not INSTALL_STATE.is_file():
         return {}
     try:
@@ -321,7 +373,8 @@ def _check_stale() -> None:
         )
         return
 
-    install_version = _read_install_state().get("version", "")
+    install_state = _read_install_state()
+    install_version = install_state.get("package_version", install_state.get("version", ""))
     if not install_version:
         print(
             "⚠️  skill install version is not recorded.\n"
@@ -333,6 +386,16 @@ def _check_stale() -> None:
         print(
             f"⚠️  obsidian-wiki upgraded {install_version} → {__version__} but skills haven't been refreshed.\n"
             "   Run: obsidian-wiki install-skills",
+            file=sys.stderr,
+        )
+        return
+
+    installed_hash = install_state.get("skills_content_hash", "")
+    current_hash = _skills_content_hash(skills_dir())
+    if not installed_hash or installed_hash != current_hash:
+        print(
+            "⚠️  bundled skill content changed after the last install.\n"
+            "   Run: obsidian-wiki install-skills --copy",
             file=sys.stderr,
         )
         return
@@ -415,10 +478,16 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             name="bundled-skills",
             status="pass" if bundled else "fail",
             detail=f"{len(bundled)} bundled skill(s) available",
-            hint="" if bundled else "reinstall obsidian-wiki",
+            hint="" if bundled else "from the local repository root run: pip install -e .",
         )
     except FileNotFoundError as exc:
-        _doctor_add(checks, name="bundled-skills", status="fail", detail=str(exc), hint="reinstall obsidian-wiki")
+        _doctor_add(
+            checks,
+            name="bundled-skills",
+            status="fail",
+            detail=str(exc),
+            hint="from the local repository root run: pip install -e .",
+        )
         bundled = []
 
     boot = bootstrap_dir()
@@ -427,7 +496,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
         name="bootstrap-assets",
         status="pass" if boot else "fail",
         detail=str(boot) if boot else "bootstrap files not found",
-        hint="" if boot else "reinstall obsidian-wiki",
+        hint="" if boot else "from the local repository root run: pip install -e .",
     )
 
     config = _read_config()
@@ -465,7 +534,8 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             hint="",
         )
 
-    install_version = _read_install_state().get("version", "")
+    install_state = _read_install_state()
+    install_version = install_state.get("package_version", install_state.get("version", ""))
     if install_version and install_version != __version__:
         _doctor_add(
             checks,
@@ -489,6 +559,33 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             status="warn",
             detail="skill install version not recorded",
             hint="run: obsidian-wiki install-skills",
+        )
+
+    recorded_hash = install_state.get("skills_content_hash", "")
+    current_hash = _skills_content_hash(skills_dir())
+    if not recorded_hash:
+        _doctor_add(
+            checks,
+            name="skill-content-version",
+            status="warn",
+            detail="skill content hash not recorded",
+            hint="run: obsidian-wiki install-skills --copy",
+        )
+    elif recorded_hash != current_hash:
+        _doctor_add(
+            checks,
+            name="skill-content-version",
+            status="warn",
+            detail="bundled skills changed after the last install",
+            hint="run: obsidian-wiki install-skills --copy",
+        )
+    else:
+        _doctor_add(
+            checks,
+            name="skill-content-version",
+            status="pass",
+            detail=f"installed skill version matches source ({current_hash[:12]})",
+            hint="",
         )
 
     if vault is not None:
@@ -537,6 +634,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
 
     agent_summaries: list[str] = []
     partial_agents: list[str] = []
+    mismatched_agents: list[str] = []
     full_agents = 0
     bundled_set = set(bundled)
     for rel, label, _subset in GLOBAL_AGENT_DIRS:
@@ -549,6 +647,8 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
         agent_summaries.append(f"{label}: {count}/{len(bundled_set)}")
         if missing:
             partial_agents.append(label)
+        elif _skills_content_hash(agent_dir, bundled) != current_hash:
+            mismatched_agents.append(label)
         else:
             full_agents += 1
 
@@ -559,6 +659,14 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             status="warn",
             detail="no global agent skill installs found",
             hint="run: obsidian-wiki install-skills",
+        )
+    elif mismatched_agents:
+        _doctor_add(
+            checks,
+            name="agent-installs",
+            status="fail",
+            detail=f"installed skill content differs from source: {', '.join(mismatched_agents)}",
+            hint="run: obsidian-wiki install-skills --copy",
         )
     elif partial_agents:
         _doctor_add(
@@ -682,7 +790,9 @@ def cmd_install_skills(args: argparse.Namespace) -> int:
         install_project(project_dir, mode)
 
     _write_install_state(mode)
-    print(f"\n✅  Skills refreshed (mode: {mode}); config was not modified.\n")
+    state = _read_install_state()
+    content_hash = str(state["skills_content_hash"])
+    print(f"\n✅  Skills refreshed (mode: {mode}, version: {content_hash[:12]}); config was not modified.\n")
     return 0
 
 
@@ -963,8 +1073,16 @@ def cmd_info(args: argparse.Namespace) -> int:
     if GLOBAL_CONFIG.exists():
         vp = _read_config_value("OBSIDIAN_VAULT_PATH")
         print(f"vault:     {vp or '(unset)'}")
-    install_version = _read_install_state().get("version", "")
-    print(f"skills installed: {install_version or '(not recorded)'}")
+    install_state = _read_install_state()
+    install_version = install_state.get("package_version", install_state.get("version", ""))
+    content_hash = install_state.get("skills_content_hash", "")
+    source_commit = install_state.get("source_commit", "")
+    source_dirty = install_state.get("source_dirty", False)
+    print(f"package version:  {install_version or '(not recorded)'}")
+    print(f"skills version:   {content_hash[:12] if content_hash else '(not recorded)'}")
+    print(f"source revision:  {source_commit[:12] if source_commit else '(not recorded)'}"
+          f"{'-dirty' if source_dirty else ''}")
+    print(f"skills installed: {install_state.get('installed_at', '(not recorded)')}")
     print(f"bundled skills: {len(bundled)}")
     print()
     print("Agent skill install status:")

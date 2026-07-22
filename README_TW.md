@@ -22,34 +22,45 @@
 
 ### 讓你的 agent 幫你設定
 
-最快的路徑，不需要手動輸入命令。把這個 repo 交給你的 agent，然後說：
+最快的路徑，不需要手動輸入命令。把本機 checkout 交給你的 agent，然後說：
 
 ```text
-https://github.com/Ar9av/obsidian-wiki — set up my wiki
+C:\path\to\your\obsidian-wiki — set up my wiki
 ```
 
 agent 會讀取 repo 裡的 [`.skills/wiki-setup/SKILL.md`](.skills/wiki-setup/SKILL.md)，詢問你希望 vault 放在哪裡，然後初始化完整結構：資料夾、index、log、Obsidian config，以及可選的自動捕捉 hook。就是這樣；skill 本身就是設定指南。
 
 任何能讀取檔案的 agent 都能這樣使用，包括 Claude Code、Cursor、Windsurf、Codex、Gemini CLI、Kiro 等。設定完成後，所有 wiki skills 會立刻可用。
 
-### 透過 pip 安裝（推薦）
+### 安裝這份本機 fork
 
 ```bash
-pip install obsidian-wiki
+git clone <your-fork-url>
+cd obsidian-wiki
+pip install -e .
 obsidian-wiki setup --vault /path/to/your/digital/brain
 ```
 
 `obsidian-wiki setup` 只會在第一次建立 `~/.obsidian-wiki/config`，並把所有 wiki skills 安裝到你的 AI agents（Claude Code、Cursor、Codex、Gemini、Hermes、Pi 等）。Config 建立後完全由使用者擁有：後續 setup 會保留其每一個 byte，若再傳 `--vault` 會拒絕執行，不會隱含覆寫。
 
-更新時將 package 與 skills 分開：
+此專案以本機 fork 作為唯一程式來源，不使用線上發布套件更新。請勿執行
+`pip install -U obsidian-wiki`，以免 editable 安裝被線上版本取代。
+
+新增或修改 skill 後，直接部署目前 checkout：
 
 ```bash
-pip install -U obsidian-wiki
 obsidian-wiki install-skills          # 更新 links，絕不修改 config
 obsidian-wiki install-skills --copy   # Windows 沒有 symlink 權限時使用
 ```
 
-若是本機 editable checkout，將第一行改為 `pip install -e .`，再執行同一個 `install-skills` 指令。更新 skills 後建議重開 agent session。
+只有建立 Python 環境或修復 editable 連結時才重新執行 `pip install -e .`。
+更新 skills 後建議重開 agent session。
+
+Python package 版號仍由 Git tag 產生；本機 skill 修改使用獨立的 SHA-256
+內容版號。每次執行 `obsidian-wiki install-skills --copy` 都會更新 package
+版號、來源 commit／dirty 狀態、skill 內容版號與安裝時間。使用
+`obsidian-wiki info` 查看，使用 `obsidian-wiki doctor` 驗證已安裝內容是否與
+目前 checkout 一致。
 
 ```bash
 obsidian-wiki list              # 列出內建 skills
@@ -111,27 +122,17 @@ obsidian-wiki rules install-bootstrap --agent codex --apply --pretty
 
 執行 `obsidian-wiki setup` 或 `setup.sh` 後，所有支援的 agent 都可以使用這個語法，因為共用 skills 與 always-on bootstrap files 都會指回相同的 Config Resolution Protocol。routing token 可用於寫入 skills（`@work update wiki`、`@research save this`）與讀取 skills（`wiki-query @personal what do I know about X`）。
 
-### 透過 Skills CLI 安裝（已不推薦）
+### 舊版 shell 設定
 
 ```bash
-npx skills add Ar9av/obsidian-wiki
-```
-
-這只會把 markdown skills 安裝到目前 agent。它**不會**寫入 `~/.obsidian-wiki/config`、安裝 `~/.obsidian-wiki/sync.sh`，也不會接上 `obsidian-wiki setup` / `setup.sh` 會設定的全域 multi-agent bootstrap。
-
-只有在你明確想要部分、agent-local 的安裝，並且願意自行管理 config 時，才使用這條路徑。若要完整設定，請使用 **透過 pip 安裝** 或 **透過 git clone 安裝**。
-
-完整 skill 清單可在 [skills.sh/ar9av/obsidian-wiki](https://skills.sh/ar9av/obsidian-wiki) 瀏覽。
-
-### 透過 git clone 安裝
-
-```bash
-git clone https://github.com/Ar9av/obsidian-wiki.git
+git clone <your-fork-url>
 cd obsidian-wiki
 bash setup.sh
 ```
 
-當 config 不存在時，`setup.sh` 會詢問 vault（數位大腦）路徑並建立 `~/.obsidian-wiki/config`；如果 config 已存在，會原樣保留。腳本也會把 skills symlink 到所有 agent，並全域安裝 `wiki-update`。
+`setup.sh` 僅保留給舊版 Unix symlink 設定。它不會寫入 CLI 的 skill
+內容版號，因此不是支援的更新流程。每次 skill 更新都應執行
+`obsidian-wiki install-skills --copy`，確保安裝狀態與內容驗證正確。
 
 在你的 agent 中開啟 project，說 **"set up my wiki"**。就完成了。
 

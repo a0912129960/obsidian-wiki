@@ -150,6 +150,16 @@ See `wiki-query` and `wiki-export` skills for how the filter is applied.
 - **Single source of truth.** Visibility tags shape how content is surfaced — they don't duplicate or separate it.
 - **Keep context warm.** `hot.md` is a ~500-word semantic snapshot of recent activity. Every write skill updates it so the next session can pick up where the last one left off without crawling the full vault.
 
+## Change Authority Gate
+
+- This repository is a locally maintained fork and does not use the published `obsidian-wiki` package as an update source. Never recommend or run `pip install -U obsidian-wiki` or a remote force-reinstall here.
+- Install the local CLI with `pip install -e .` only when creating an environment or repairing its editable link. After skill changes, deploy them with `obsidian-wiki install-skills --copy` without treating the unchanged package version as a failed deployment.
+- Treat the Git-derived package version and the installed skill content version as separate values. `install-skills --copy` must update the content hash, source revision/dirty state, and installation time; it must not create tags or alter the package release version.
+- A diagnostic, explanation, review, or status request authorizes read-only investigation only; do not modify repository files unless the user explicitly requests implementation.
+- Treat a dependency, permission, encoding, network, or tool failure specific to the current machine as a local environment issue; do not turn its workaround into a repository-wide workflow change.
+- Changing public install/update commands, build configuration, versioning, or supported workflows requires reproducible repository-wide evidence and explicit user approval before editing.
+- Every changed file must map directly to an explicitly requested outcome; keep temporary environment workarounds outside the repository and report them separately.
+
 ## Architecture Reference
 
 For the full pattern (three-layer architecture, page templates, project org), read `.skills/llm-wiki/SKILL.md`.
