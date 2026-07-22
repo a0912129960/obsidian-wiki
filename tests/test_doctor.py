@@ -11,7 +11,6 @@ from pathlib import Path
 
 from obsidian_wiki import cli
 from obsidian_wiki.cli import list_skills
-from obsidian_wiki import __version__
 
 
 def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -52,11 +51,7 @@ def _install_all_skills(home: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "install-state.json").write_text(
         json.dumps({
-            "version": __version__,
-            "package_version": __version__,
-            "skills_content_hash": cli._skills_content_hash(cli.skills_dir()),
-            "source_commit": "test",
-            "source_dirty": False,
+            "version": cli.local_version(),
             "installed_at": "2026-07-22T00:00:00+00:00",
             "mode": "copy",
         }) + "\n",

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import obsidian_wiki.cli as cli
+import pytest
 
 
 def _redirect_paths(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
@@ -48,7 +49,7 @@ def test_setup_preserves_existing_config_byte_for_byte(monkeypatch, tmp_path: Pa
 
     assert config.read_bytes() == original
     assert calls == ["copy"]
-    assert json.loads(install_state.read_text(encoding="utf-8"))["version"] == cli.__version__
+    assert json.loads(install_state.read_text(encoding="utf-8"))["version"] == cli.local_version()
 
 
 def test_setup_rejects_vault_override_when_config_exists(monkeypatch, tmp_path: Path) -> None:
@@ -134,20 +135,22 @@ def test_install_skills_records_local_source_and_content_version(monkeypatch, tm
     assert cli.cmd_install_skills(args) == 0
     first = json.loads(install_state.read_text(encoding="utf-8"))
 
-    assert first["package_version"] == cli.__version__
-    assert first["source_commit"] == "not-a-git-checkout"
-    assert first["source_dirty"] is False
-    assert len(first["skills_content_hash"]) == 64
+    assert set(first) == {"version", "installed_at", "mode"}
+    assert first["version"].startswith("local-untracked-")
     assert first["installed_at"]
+
+    assert cli.cmd_install_skills(args) == 0
+    unchanged = json.loads(install_state.read_text(encoding="utf-8"))
+    assert unchanged["version"] == first["version"]
 
     (skill / "SKILL.md").write_text("# version two\n", encoding="utf-8")
     assert cli.cmd_install_skills(args) == 0
     second = json.loads(install_state.read_text(encoding="utf-8"))
 
-    assert second["skills_content_hash"] != first["skills_content_hash"]
+    assert second["version"] != first["version"]
 
 
-def test_skill_content_version_matches_copy_and_symlink(monkeypatch, tmp_path: Path) -> None:
+def test_skill_content_hash_matches_copy_and_symlink(monkeypatch, tmp_path: Path) -> None:
     source = tmp_path / "source"
     skill = source / "example"
     skill.mkdir(parents=True)
@@ -165,6 +168,34 @@ def test_skill_content_version_matches_copy_and_symlink(monkeypatch, tmp_path: P
 
     assert cli._skills_content_hash(copied) == source_hash
     assert cli._skills_content_hash(linked) == source_hash
+
+
+def test_all_user_commands_report_one_local_version(monkeypatch, tmp_path: Path, capsys) -> None:
+    _redirect_paths(monkeypatch, tmp_path)
+    skills = tmp_path / "repo" / ".skills"
+    skill = skills / "example"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# example\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "skills_dir", lambda: skills)
+    monkeypatch.setattr(cli, "bootstrap_dir", lambda: None)
+    monkeypatch.setattr(cli, "install_global_skills", lambda _mode: None)
+    monkeypatch.setattr(cli, "HOME", tmp_path / "home")
+    expected = cli.local_version()
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.build_parser().parse_args(["--version"])
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"obsidian-wiki {expected}"
+
+    args = argparse.Namespace(copy=True, project=None, project_only=False)
+    assert cli.cmd_install_skills(args) == 0
+    assert f"version: {expected}" in capsys.readouterr().out
+
+    assert cli.cmd_info(argparse.Namespace()) == 0
+    info = capsys.readouterr().out
+    assert f"obsidian-wiki {expected}" in info
+    assert f"local version:    {expected}" in info
+    assert f"installed version: {expected}" in info
 
 
 def test_local_fork_docs_never_recommend_remote_package_upgrade() -> None:

@@ -3,7 +3,7 @@
 A skill-based framework for AI coding agents — Claude Code, Cursor, Windsurf, Pi, Gemini CLI, Google Antigravity, Codex, Hermes, OpenClaw, OpenCode, Aider, Factory Droid, Trae / Trae CN, Kiro, GitHub Copilot (CLI + VS Code Chat) — to build and maintain an Obsidian wiki using Karpathy's LLM Wiki pattern. No scripts, no API keys — the agent **is** the LLM.
 
 > `setup.sh` is retained only for legacy Unix symlink setup. It does not update
-> the CLI skill content version. Use `obsidian-wiki install-skills --copy` for
+> the CLI local version. Use `obsidian-wiki install-skills --copy` for
 > supported skill updates and version tracking.
 
 ## Install this local fork
@@ -31,12 +31,12 @@ obsidian-wiki install-skills --copy
 
 Run `pip install -e .` again only when creating a Python environment or repairing the editable link. To maintain a personal default, copy a working `~/.obsidian-wiki/config` to `~/.obsidian-wiki/default.env`; restore it only with an explicit copy when you intend to replace config. The CLI never rewrites either an existing config or that template. Run `obsidian-wiki info` to see resolved paths.
 
-The Python package version remains Git-tag-derived. Local skill changes are
-versioned separately by a deterministic SHA-256 content hash. Every
-`obsidian-wiki install-skills --copy` run records the package version, source
-commit and dirty state, skill content version, and installation time in
-`~/.obsidian-wiki/install-state.json`. Use `obsidian-wiki info` to display this
-state and `obsidian-wiki doctor` to verify installed copies against this checkout.
+This fork uses one local version identifier for its program, skills, policy, and
+bootstrap inputs. It combines the Git revision/dirty state with a deterministic
+SHA-256 content fingerprint. `obsidian-wiki --version`, `info`, and
+`install-skills --copy` display the same value. Each install records only that
+version, mode, and time in `~/.obsidian-wiki/install-state.json`. Use `doctor` to
+verify the recorded version and installed copies against this checkout.
 
 Useful local commands after setup:
 

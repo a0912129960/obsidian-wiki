@@ -16,7 +16,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from obsidian_wiki import __version__
 from obsidian_wiki import policy
 
 HOME = Path.home()
@@ -87,6 +86,38 @@ def _skills_content_hash(root: Path, names: list[str] | None = None) -> str:
     return digest.hexdigest()
 
 
+def _product_content_hash() -> str:
+    """Hash all local runtime, skill, policy, and bootstrap inputs."""
+    repo = skills_dir().parent
+    roots = [repo / ".skills", repo / "obsidian_wiki", repo / "policy"]
+    files = [
+        repo / "AGENTS.md",
+        repo / "pyproject.toml",
+        repo / ".cursor" / "rules" / "obsidian-wiki.mdc",
+        repo / ".windsurf" / "rules" / "obsidian-wiki.md",
+        repo / ".kiro" / "steering" / "obsidian-wiki.md",
+        repo / ".agent" / "rules" / "obsidian-wiki.md",
+        repo / ".agent" / "workflows" / "obsidian-wiki.md",
+        repo / ".github" / "copilot-instructions.md",
+    ]
+    candidates = [
+        path
+        for root in roots if root.is_dir()
+        for path in root.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.suffix not in {".pyc", ".pyo"}
+    ]
+    candidates.extend(path for path in files if path.is_file())
+    digest = hashlib.sha256()
+    for path in sorted(set(candidates)):
+        digest.update(path.relative_to(repo).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def _source_revision() -> tuple[str, bool]:
     """Return the local checkout revision and whether it has uncommitted changes."""
     repo = skills_dir().parent
@@ -110,6 +141,14 @@ def _source_revision() -> tuple[str, bool]:
         return commit, dirty
     except (OSError, subprocess.CalledProcessError):
         return "unavailable", False
+
+
+def local_version() -> str:
+    """Return the single version identifier for this local fork's full product."""
+    commit, dirty = _source_revision()
+    revision = commit[:12] if commit not in {"not-a-git-checkout", "unavailable"} else "untracked"
+    dirty_marker = "-dirty" if dirty else ""
+    return f"local-{revision}{dirty_marker}-{_product_content_hash()[:12]}"
 
 
 # ── Skill installation ───────────────────────────────────────────────────────
@@ -338,14 +377,9 @@ def write_config(vault_path: str) -> None:
 
 def _write_install_state(mode: str) -> None:
     GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    source_commit, source_dirty = _source_revision()
     INSTALL_STATE.write_text(
         json.dumps({
-            "version": __version__,
-            "package_version": __version__,
-            "source_commit": source_commit,
-            "source_dirty": source_dirty,
-            "skills_content_hash": _skills_content_hash(skills_dir()),
+            "version": local_version(),
             "installed_at": datetime.now(timezone.utc).isoformat(),
             "mode": mode,
         }, indent=2) + "\n",
@@ -367,14 +401,14 @@ def _check_stale() -> None:
     """Warn if installed skills are stale or missing."""
     if not GLOBAL_CONFIG.is_file():
         print(
-            f"⚠️  obsidian-wiki {__version__} is installed but setup has never been run.\n"
+            f"⚠️  obsidian-wiki {local_version()} is installed but setup has never been run.\n"
             f"   Run: obsidian-wiki setup --vault /path/to/your/vault",
             file=sys.stderr,
         )
         return
 
-    install_state = _read_install_state()
-    install_version = install_state.get("package_version", install_state.get("version", ""))
+    current_version = local_version()
+    install_version = _read_install_state().get("version", "")
     if not install_version:
         print(
             "⚠️  skill install version is not recorded.\n"
@@ -382,19 +416,9 @@ def _check_stale() -> None:
             file=sys.stderr,
         )
         return
-    if install_version != __version__:
+    if install_version != current_version:
         print(
-            f"⚠️  obsidian-wiki upgraded {install_version} → {__version__} but skills haven't been refreshed.\n"
-            "   Run: obsidian-wiki install-skills",
-            file=sys.stderr,
-        )
-        return
-
-    installed_hash = install_state.get("skills_content_hash", "")
-    current_hash = _skills_content_hash(skills_dir())
-    if not installed_hash or installed_hash != current_hash:
-        print(
-            "⚠️  bundled skill content changed after the last install.\n"
+            f"⚠️  local version changed {install_version} → {current_version} after the last install.\n"
             "   Run: obsidian-wiki install-skills --copy",
             file=sys.stderr,
         )
@@ -535,21 +559,22 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
         )
 
     install_state = _read_install_state()
-    install_version = install_state.get("package_version", install_state.get("version", ""))
-    if install_version and install_version != __version__:
+    current_version = local_version()
+    install_version = install_state.get("version", "")
+    if install_version and install_version != current_version:
         _doctor_add(
             checks,
             name="install-version",
             status="warn",
-            detail=f"skills installed with {install_version}; installed package is {__version__}",
-            hint="run: obsidian-wiki install-skills",
+            detail=f"installed version is {install_version}; current local version is {current_version}",
+            hint="run: obsidian-wiki install-skills --copy",
         )
     elif install_version:
         _doctor_add(
             checks,
             name="install-version",
             status="pass",
-            detail=f"skill install version matches installed package ({__version__})",
+            detail=f"installed version matches current local version ({current_version})",
             hint="",
         )
     else:
@@ -558,35 +583,10 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             name="install-version",
             status="warn",
             detail="skill install version not recorded",
-            hint="run: obsidian-wiki install-skills",
+            hint="run: obsidian-wiki install-skills --copy",
         )
 
-    recorded_hash = install_state.get("skills_content_hash", "")
     current_hash = _skills_content_hash(skills_dir())
-    if not recorded_hash:
-        _doctor_add(
-            checks,
-            name="skill-content-version",
-            status="warn",
-            detail="skill content hash not recorded",
-            hint="run: obsidian-wiki install-skills --copy",
-        )
-    elif recorded_hash != current_hash:
-        _doctor_add(
-            checks,
-            name="skill-content-version",
-            status="warn",
-            detail="bundled skills changed after the last install",
-            hint="run: obsidian-wiki install-skills --copy",
-        )
-    else:
-        _doctor_add(
-            checks,
-            name="skill-content-version",
-            status="pass",
-            detail=f"installed skill version matches source ({current_hash[:12]})",
-            hint="",
-        )
 
     if vault is not None:
         if vault.is_dir():
@@ -791,8 +791,7 @@ def cmd_install_skills(args: argparse.Namespace) -> int:
 
     _write_install_state(mode)
     state = _read_install_state()
-    content_hash = str(state["skills_content_hash"])
-    print(f"\n✅  Skills refreshed (mode: {mode}, version: {content_hash[:12]}); config was not modified.\n")
+    print(f"\n✅  Skills refreshed (mode: {mode}, version: {state['version']}); config was not modified.\n")
     return 0
 
 
@@ -1065,7 +1064,8 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_info(args: argparse.Namespace) -> int:
     bundled = list_skills()
-    print(f"obsidian-wiki {__version__}")
+    current_version = local_version()
+    print(f"obsidian-wiki {current_version}")
     print(f"skills:    {skills_dir()}")
     boot = bootstrap_dir()
     print(f"bootstrap: {boot if boot else '(not found)'}")
@@ -1074,14 +1074,8 @@ def cmd_info(args: argparse.Namespace) -> int:
         vp = _read_config_value("OBSIDIAN_VAULT_PATH")
         print(f"vault:     {vp or '(unset)'}")
     install_state = _read_install_state()
-    install_version = install_state.get("package_version", install_state.get("version", ""))
-    content_hash = install_state.get("skills_content_hash", "")
-    source_commit = install_state.get("source_commit", "")
-    source_dirty = install_state.get("source_dirty", False)
-    print(f"package version:  {install_version or '(not recorded)'}")
-    print(f"skills version:   {content_hash[:12] if content_hash else '(not recorded)'}")
-    print(f"source revision:  {source_commit[:12] if source_commit else '(not recorded)'}"
-          f"{'-dirty' if source_dirty else ''}")
+    print(f"local version:    {current_version}")
+    print(f"installed version: {install_state.get('version', '(not recorded)')}")
     print(f"skills installed: {install_state.get('installed_at', '(not recorded)')}")
     print(f"bundled skills: {len(bundled)}")
     print()
@@ -1194,7 +1188,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="obsidian-wiki",
         description="Install the LLM-Wiki agent skills into your AI coding agents.",
     )
-    p.add_argument("-V", "--version", action="version", version=f"obsidian-wiki {__version__}")
+    p.add_argument("-V", "--version", action="version", version=f"obsidian-wiki {local_version()}")
     sub = p.add_subparsers(dest="command")
 
     sp = sub.add_parser("setup", help="initialize config if missing and install skills (default)")
@@ -1422,7 +1416,7 @@ def _add_setup_args(sp: argparse.ArgumentParser) -> None:
     sp.add_argument(
         "--copy",
         action="store_true",
-        help="copy skill files instead of symlinking to the installed package",
+        help="copy skill files instead of symlinking to the local checkout",
     )
 
 
@@ -1444,7 +1438,7 @@ def _add_install_skills_args(sp: argparse.ArgumentParser) -> None:
     sp.add_argument(
         "--copy",
         action="store_true",
-        help="copy skill files instead of symlinking to the installed package",
+        help="copy skill files instead of symlinking to the local checkout",
     )
 
 

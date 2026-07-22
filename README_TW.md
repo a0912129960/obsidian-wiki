@@ -56,11 +56,11 @@ obsidian-wiki install-skills --copy   # Windows 沒有 symlink 權限時使用
 只有建立 Python 環境或修復 editable 連結時才重新執行 `pip install -e .`。
 更新 skills 後建議重開 agent session。
 
-Python package 版號仍由 Git tag 產生；本機 skill 修改使用獨立的 SHA-256
-內容版號。每次執行 `obsidian-wiki install-skills --copy` 都會更新 package
-版號、來源 commit／dirty 狀態、skill 內容版號與安裝時間。使用
-`obsidian-wiki info` 查看，使用 `obsidian-wiki doctor` 驗證已安裝內容是否與
-目前 checkout 一致。
+此 fork 只有一個本機版本識別，涵蓋程式、skills、policy 與 bootstrap
+內容，並由 Git revision／dirty 狀態及 SHA-256 內容指紋組成。
+`obsidian-wiki --version`、`info` 與 `install-skills --copy` 顯示相同版本。
+每次安裝只記錄該版本、模式與時間；`doctor` 會驗證安裝版本及已複製內容
+是否與目前 checkout 一致。
 
 ```bash
 obsidian-wiki list              # 列出內建 skills
@@ -130,8 +130,8 @@ cd obsidian-wiki
 bash setup.sh
 ```
 
-`setup.sh` 僅保留給舊版 Unix symlink 設定。它不會寫入 CLI 的 skill
-內容版號，因此不是支援的更新流程。每次 skill 更新都應執行
+`setup.sh` 僅保留給舊版 Unix symlink 設定。它不會寫入 CLI 的本機版本，
+因此不是支援的更新流程。每次 skill 更新都應執行
 `obsidian-wiki install-skills --copy`，確保安裝狀態與內容驗證正確。
 
 在你的 agent 中開啟 project，說 **"set up my wiki"**。就完成了。

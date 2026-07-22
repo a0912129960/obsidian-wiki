@@ -153,8 +153,8 @@ See `wiki-query` and `wiki-export` skills for how the filter is applied.
 ## Change Authority Gate
 
 - This repository is a locally maintained fork and does not use the published `obsidian-wiki` package as an update source. Never recommend or run `pip install -U obsidian-wiki` or a remote force-reinstall here.
-- Install the local CLI with `pip install -e .` only when creating an environment or repairing its editable link. After skill changes, deploy them with `obsidian-wiki install-skills --copy` without treating the unchanged package version as a failed deployment.
-- Treat the Git-derived package version and the installed skill content version as separate values. `install-skills --copy` must update the content hash, source revision/dirty state, and installation time; it must not create tags or alter the package release version.
+- Install the local CLI with `pip install -e .` only when creating an environment or repairing its editable link. After program or skill changes, deploy with `obsidian-wiki install-skills --copy`.
+- Use one local version identifier for the program, skills, policy, and bootstrap inputs. `--version`, `info`, and `install-skills --copy` must report that same identifier; do not introduce a separate package or skill version into the user workflow.
 - A diagnostic, explanation, review, or status request authorizes read-only investigation only; do not modify repository files unless the user explicitly requests implementation.
 - Treat a dependency, permission, encoding, network, or tool failure specific to the current machine as a local environment issue; do not turn its workaround into a repository-wide workflow change.
 - Changing public install/update commands, build configuration, versioning, or supported workflows requires reproducible repository-wide evidence and explicit user approval before editing.

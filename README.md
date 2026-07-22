@@ -59,13 +59,12 @@ obsidian-wiki install-skills --copy   # Windows fallback without symlink privile
 Run `pip install -e .` again only when creating a Python environment or repairing
 the editable link. Open a new agent session after refreshing skills.
 
-`install-skills` records two different versions in
-`~/.obsidian-wiki/install-state.json`: the Git-derived Python package version and
-a SHA-256 version of the actual skill contents. Local skill edits do not pretend
-to be a new released package version. Each `install-skills --copy` run updates
-the skill content version, source commit/dirty state, and installation time.
-`obsidian-wiki info` displays them; `obsidian-wiki doctor` detects source changes
-after installation and copied skill content that differs from this checkout.
+This fork has one local version identifier covering its program, skills, policy,
+and bootstrap inputs. It combines the Git revision/dirty state with a SHA-256
+content fingerprint. `obsidian-wiki --version`, `info`, and
+`install-skills --copy` display the same value. Each install records that value,
+mode, and time in `~/.obsidian-wiki/install-state.json`; `doctor` detects a local
+change after installation and copied skill content that differs from this checkout.
 
 ```bash
 obsidian-wiki list              # list the bundled skills
@@ -138,7 +137,7 @@ bash setup.sh
 ```
 
 `setup.sh` is retained for legacy Unix symlink setup. It does not write the CLI
-skill content version and is not the supported update path. Use
+local version and is not the supported update path. Use
 `obsidian-wiki install-skills --copy` for every skill update so installation state
 and content verification remain accurate.
 
